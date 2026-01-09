@@ -220,6 +220,7 @@ if (loginForm) {
         localStorage.setItem('authToken', resp.token);
         enterApp();
         loadCurrentUserProfile();
+        showToast('Logged in successfully', 'success', 3000);
       } else {
         showToast('Login failed', 'error', 3000);
       }
@@ -725,10 +726,16 @@ let avatarMenuEl = null;
     avatarFileInput.addEventListener('change', async () => {
       const file = avatarFileInput.files && avatarFileInput.files[0];
       if (!file) return;
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('authToken') : null;
-      const formData = new FormData();
-      formData.append('avatar', file);
+      // Open simple cropper before uploading avatar
       try {
+        const croppedBlob = await openAvatarCropper(file);
+        if (!croppedBlob) {
+          avatarFileInput.value = '';
+          return;
+        }
+        const token = typeof localStorage !== 'undefined' ? localStorage.getItem('authToken') : null;
+        const formData = new FormData();
+        formData.append('avatar', croppedBlob, 'avatar.png');
         const res = await fetch('/api/profile/avatar', {
           method: 'POST',
           headers: token ? { 'x-auth-token': token } : {},
@@ -751,6 +758,122 @@ let avatarMenuEl = null;
       }
     });
   }
+// Simple centered square avatar cropper with zoom
+async function openAvatarCropper(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const overlay = document.createElement('div');
+      overlay.className = 'avatar-crop-overlay';
+
+      const card = document.createElement('div');
+      card.className = 'avatar-crop-card';
+
+      const title = document.createElement('h3');
+      title.className = 'avatar-crop-title';
+      title.textContent = 'Adjust your profile photo';
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'avatar-crop-preview-wrap';
+
+      const img = document.createElement('img');
+      img.className = 'avatar-crop-image';
+      img.src = reader.result;
+
+      const mask = document.createElement('div');
+      mask.className = 'avatar-crop-mask';
+
+      previewWrap.appendChild(img);
+      previewWrap.appendChild(mask);
+
+      const controls = document.createElement('div');
+      controls.className = 'avatar-crop-controls';
+      const zoomLabel = document.createElement('span');
+      zoomLabel.textContent = 'Zoom';
+      const zoomInput = document.createElement('input');
+      zoomInput.type = 'range';
+      zoomInput.min = '1';
+      zoomInput.max = '3';
+      zoomInput.step = '0.05';
+      zoomInput.value = '1';
+      controls.appendChild(zoomLabel);
+      controls.appendChild(zoomInput);
+
+      const actions = document.createElement('div');
+      actions.className = 'avatar-crop-actions';
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.className = 'btn-secondary';
+      cancelBtn.textContent = 'Cancel';
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button';
+      saveBtn.className = 'btn-primary';
+      saveBtn.textContent = 'Save';
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+
+      card.appendChild(title);
+      card.appendChild(previewWrap);
+      card.appendChild(controls);
+      card.appendChild(actions);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+
+      function cleanup() {
+        document.body.removeChild(overlay);
+      }
+
+      cancelBtn.onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+
+      zoomInput.addEventListener('input', () => {
+        const zoom = parseFloat(zoomInput.value) || 1;
+        img.style.transform = `translate(-50%, -50%) scale(${zoom})`;
+      });
+
+      img.onload = () => {
+        img.style.transform = 'translate(-50%, -50%) scale(1)';
+      };
+
+      saveBtn.onclick = () => {
+        const canvasSize = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasSize;
+        canvas.height = canvasSize;
+        const ctx = canvas.getContext('2d');
+        const zoom = parseFloat(zoomInput.value) || 1;
+
+        const imgEl = img;
+        const iw = imgEl.naturalWidth;
+        const ih = imgEl.naturalHeight;
+        if (!iw || !ih) {
+          cleanup();
+          resolve(file);
+          return;
+        }
+
+        const baseScale = Math.max(canvasSize / iw, canvasSize / ih);
+        const scale = baseScale * zoom;
+        const drawWidth = iw * scale;
+        const drawHeight = ih * scale;
+        const dx = (canvasSize - drawWidth) / 2;
+        const dy = (canvasSize - drawHeight) / 2;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasSize, canvasSize);
+        ctx.drawImage(imgEl, dx, dy, drawWidth, drawHeight);
+
+        canvas.toBlob((blob) => {
+          cleanup();
+          if (blob) resolve(blob);
+          else resolve(file);
+        }, 'image/png');
+      };
+    };
+    reader.readAsDataURL(file);
+  });
+}
 async function loadDashboardStats() {
   const statsBox = document.getElementById('dashboardStats');
   const monthCanvas = document.getElementById('linksMonthChart');
