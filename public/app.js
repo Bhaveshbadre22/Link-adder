@@ -100,6 +100,11 @@ let gameStatus = [];
 let gameTimerId = null;
 let gameRemaining = 0;
 
+// sidebar menu elements
+const sidebarMenuGroups = document.querySelectorAll('[data-menu-group]');
+const sidebarMenuToggles = document.querySelectorAll('[data-menu-toggle]');
+const sidebarNavTargets = document.querySelectorAll('[data-nav-target]');
+
 function showDashboard() {
   if (dashboardTab) dashboardTab.classList.add('active');
   dashboardSection.style.display = 'block';
@@ -119,6 +124,43 @@ function showLinksView() {
 }
 if (dashboardTab) {
   dashboardTab.onclick = showDashboard;
+}
+
+// handle primary sidebar navigation (dashboard/links)
+if (sidebarNavTargets && sidebarNavTargets.length) {
+  sidebarNavTargets.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-nav-target');
+      if (target === 'dashboard') {
+        showDashboard();
+      } else if (target === 'links-all' || target === 'links-add') {
+        showLinksView();
+        if (target === 'links-add' && linkUrl) {
+          setTimeout(() => {
+            linkUrl.focus();
+          }, 0);
+        }
+      }
+    });
+  });
+}
+
+// accordion behavior for sidebar menu groups
+if (sidebarMenuToggles && sidebarMenuToggles.length) {
+  sidebarMenuToggles.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-menu-toggle');
+      if (!key) return;
+      const group = document.querySelector(`[data-menu-group="${key}"]`);
+      if (!group) return;
+      const isOpen = group.classList.contains('is-open');
+      sidebarMenuGroups.forEach((g) => {
+        if (g !== group) g.classList.remove('is-open');
+      });
+      if (!isOpen) group.classList.add('is-open');
+      else group.classList.remove('is-open');
+    });
+  });
 }
 
 function showLoginScreen() {
@@ -638,14 +680,61 @@ if (notificationsClear && notificationsList && notificationsBadge) {
 
 if (logoutBtn) {
   logoutBtn.addEventListener('click', () => {
-    localStorage.removeItem('authToken');
-    showLoginScreen();
-  });
-}
-if (logoutBtn) {
-  logoutBtn.addEventListener('click', () => {
     openLogoutConfirmModal();
   });
+}
+
+function openLogoutConfirmModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay logout-modal';
+  overlay.setAttribute('aria-hidden', 'false');
+
+  const card = document.createElement('div');
+  card.className = 'modal-card logout-card';
+
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const title = document.createElement('h2');
+  title.textContent = 'Log out?';
+  const subtitle = document.createElement('p');
+  subtitle.className = 'modal-subtitle';
+  subtitle.textContent = 'You can log back in anytime using your username and password.';
+  header.appendChild(title);
+  header.appendChild(subtitle);
+
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn-secondary';
+  cancelBtn.textContent = 'Cancel';
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn-primary';
+  confirmBtn.textContent = 'Log out';
+  footer.appendChild(cancelBtn);
+  footer.appendChild(confirmBtn);
+
+  card.appendChild(header);
+  card.appendChild(footer);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.removeChild(overlay);
+  }
+
+  cancelBtn.onclick = () => close();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  confirmBtn.onclick = () => {
+    localStorage.removeItem('authToken');
+    close();
+    showLoginScreen();
+  };
 }
 
 let avatarMenuEl = null;
@@ -1161,9 +1250,10 @@ async function loadDashboardStats() {
 let folders = [];
 let currentFolder = null;
 
-// Local preferences for root-level folder order and pinned folders
+// Local preferences for root-level folder order, pinned folders, and expanded branches
 let rootFolderOrder = [];
 let pinnedRootFolders = new Set();
+let expandedFolders = new Set();
 
 function loadFolderPrefs() {
   try {
@@ -1179,12 +1269,20 @@ function loadFolderPrefs() {
   } catch (_e2) {
     pinnedRootFolders = new Set();
   }
+  try {
+    const rawExpanded = localStorage.getItem('expandedFolders');
+    const arrExp = rawExpanded ? JSON.parse(rawExpanded) : [];
+    expandedFolders = new Set(arrExp.map(String));
+  } catch (_e3) {
+    expandedFolders = new Set();
+  }
 }
 
 function saveFolderPrefs() {
   try {
     localStorage.setItem('rootFolderOrder', JSON.stringify(rootFolderOrder || []));
     localStorage.setItem('pinnedRootFolders', JSON.stringify(Array.from(pinnedRootFolders || [])));
+    localStorage.setItem('expandedFolders', JSON.stringify(Array.from(expandedFolders || [])));
   } catch (_e) {}
 }
 
@@ -1204,6 +1302,9 @@ async function loadFolders() {
       if (!rootFolderOrder.includes(String(id))) rootFolderOrder.push(String(id));
     });
   }
+  // keep expanded folder list in sync with existing folders
+  const allIds = new Set((folders || []).map(f => String(f.id)));
+  expandedFolders = new Set(Array.from(expandedFolders || []).filter(id => allIds.has(String(id))));
   saveFolderPrefs();
   renderFolders();
   populateFolderSelect();
@@ -1213,7 +1314,17 @@ function renderFolders() {
   foldersEl.innerHTML = '';
   const liAll = document.createElement('li');
   liAll.className = 'folder folder-all' + (currentFolder === null ? ' active' : '');
-  liAll.textContent = 'All Links';
+  const allRow = document.createElement('div');
+  allRow.className = 'folder-all-row';
+  const allIcon = document.createElement('span');
+  allIcon.className = 'folder-all-icon';
+  allIcon.textContent = '🔗';
+  const allLabel = document.createElement('span');
+  allLabel.className = 'folder-all-label';
+  allLabel.textContent = 'All Links';
+  allRow.appendChild(allIcon);
+  allRow.appendChild(allLabel);
+  liAll.appendChild(allRow);
   liAll.onclick = () => { currentFolder = null; showLinksView(); loadLinks(); renderFolders(); };
   foldersEl.appendChild(liAll);
   const byParent = {};
@@ -1249,34 +1360,52 @@ function renderFolders() {
       const li = document.createElement('li');
       li.className = 'folder depth-' + depth + (currentFolder === f.id ? ' active' : '');
       li.dataset.id = String(f.id);
+      const idStr = String(f.id);
+      const hasChildren = !!(byParent[f.id] && byParent[f.id].length);
 
       const row = document.createElement('div'); row.className = 'folder-row';
       if (depth > 0) {
         row.style.marginLeft = (depth * 18) + 'px';
       }
-      const btn = document.createElement('button'); btn.className = 'folder-actions'; btn.textContent = '⋮';
-      const nameSpan = document.createElement('span'); nameSpan.className = 'folder-name';
-      nameSpan.textContent = depth > 0 ? '↳ ' + f.name : f.name;
-      nameSpan.onclick = () => { currentFolder = f.id; showLinksView(); loadLinks(); renderFolders(); };
-      btn.onclick = (e) => { e.stopPropagation(); openFolderMenu(f, li, btn); };
-      // Pin button for root-level folders
-      if (depth === 0) {
-        const pinBtn = document.createElement('button');
-        pinBtn.type = 'button';
-        const idStr = String(f.id);
-        const pinned = pinnedRootFolders.has(idStr);
-        pinBtn.className = 'folder-pin' + (pinned ? ' pinned' : '');
-        pinBtn.title = pinned ? 'Unpin folder' : 'Pin folder';
-        pinBtn.textContent = pinned ? '★' : '☆';
-        pinBtn.onclick = (e) => {
+
+      // expand / collapse chevron (left side, like design)
+      let toggle = null;
+      if (hasChildren) {
+        const expanded = expandedFolders.has(idStr);
+        toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'folder-toggle' + (expanded ? ' expanded' : '');
+        toggle.onclick = (e) => {
           e.stopPropagation();
-          if (pinnedRootFolders.has(idStr)) pinnedRootFolders.delete(idStr);
-          else pinnedRootFolders.add(idStr);
+          if (expandedFolders.has(idStr)) expandedFolders.delete(idStr);
+          else expandedFolders.add(idStr);
           saveFolderPrefs();
           renderFolders();
         };
-        row.appendChild(pinBtn);
+        row.appendChild(toggle);
       }
+
+      // Static pin indicator for root-level folders (state controlled from menu)
+      if (depth === 0 && pinnedRootFolders.has(idStr)) {
+        const pinIcon = document.createElement('span');
+        pinIcon.className = 'folder-pin-indicator';
+        pinIcon.textContent = '★';
+        row.appendChild(pinIcon);
+      }
+
+      // Folder icon for all folders (color varies by depth)
+      const folderIcon = document.createElement('span');
+      folderIcon.className = 'folder-icon ' + (depth === 0 ? 'folder-icon-root' : 'folder-icon-sub');
+      folderIcon.textContent = '📁';
+      row.appendChild(folderIcon);
+
+      const nameSpan = document.createElement('span'); nameSpan.className = 'folder-name';
+      nameSpan.textContent = depth > 0 ? '↳ ' + f.name : f.name;
+      nameSpan.onclick = () => { currentFolder = f.id; showLinksView(); loadLinks(); renderFolders(); };
+
+      const btn = document.createElement('button'); btn.className = 'folder-actions'; btn.textContent = '⋮';
+      btn.onclick = (e) => { e.stopPropagation(); openFolderMenu(f, li, btn); };
+
       row.appendChild(nameSpan);
       row.appendChild(btn);
       li.appendChild(row);
@@ -1325,11 +1454,39 @@ function renderFolders() {
       }
 
       foldersEl.appendChild(li);
-      renderBranch(f.id, depth + 1);
+      if (expandedFolders.has(idStr)) {
+        renderBranch(f.id, depth + 1);
+      }
     });
   }
 
   renderBranch(null, 0);
+}
+
+async function duplicateFolderTree(folder, newRootName) {
+  if (!folders || !folders.length) return;
+  const childrenByParent = {};
+  folders.forEach((f) => {
+    if (f.parent_id == null) return;
+    const key = String(f.parent_id);
+    if (!childrenByParent[key]) childrenByParent[key] = [];
+    childrenByParent[key].push(f);
+  });
+
+  async function cloneNode(source, parentId, overrideName) {
+    const payload = { name: overrideName || source.name, parent_id: parentId };
+    const created = await api('/api/folders', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const children = childrenByParent[String(source.id)] || [];
+    for (const child of children) {
+      await cloneNode(child, created.id, null);
+    }
+  }
+
+  const parentId = folder.parent_id || null;
+  await cloneNode(folder, parentId, newRootName);
 }
 
 function openFolderMenu(folder, liElem, btnElem) {
@@ -1338,10 +1495,21 @@ function openFolderMenu(folder, liElem, btnElem) {
   const menu = document.createElement('div'); menu.className = 'folder-menu';
   const renameBtn = document.createElement('button'); renameBtn.textContent = 'Rename';
   const subfolderBtn = document.createElement('button'); subfolderBtn.textContent = 'Add subfolder';
+  const isRoot = !folder.parent_id;
+  let pinToggleBtn = null;
+  if (isRoot) {
+    pinToggleBtn = document.createElement('button');
+    const idStr = String(folder.id);
+    const isPinned = pinnedRootFolders.has(idStr);
+    pinToggleBtn.textContent = isPinned ? 'Unpin folder' : 'Pin folder';
+  }
+  const duplicateBtn = document.createElement('button'); duplicateBtn.textContent = 'Duplicate';
   const bulkBtn = document.createElement('button'); bulkBtn.textContent = 'Add bulk links';
   const delBtn = document.createElement('button'); delBtn.textContent = 'Delete';
   menu.appendChild(renameBtn);
   menu.appendChild(subfolderBtn);
+  menu.appendChild(duplicateBtn);
+  if (pinToggleBtn) menu.appendChild(pinToggleBtn);
   menu.appendChild(bulkBtn);
   menu.appendChild(delBtn);
   // position menu next to button
@@ -1369,6 +1537,24 @@ function openFolderMenu(folder, liElem, btnElem) {
       showToast('Failed to create subfolder', 'error');
     }
   };
+  duplicateBtn.onclick = async (ev) => {
+    ev.stopPropagation(); cleanup();
+    let suggested = folder.name ? folder.name + ' copy' : 'New folder copy';
+    let newName = prompt('Name for duplicated folder', suggested);
+    if (newName == null) return; // user cancelled
+    newName = newName.trim();
+    if (!newName) {
+      showToast('Folder name is required', 'error');
+      return;
+    }
+    try {
+      await duplicateFolderTree(folder, newName);
+      await loadFolders();
+      showToast('Folder duplicated');
+    } catch (e) {
+      showToast('Failed to duplicate folder', 'error');
+    }
+  };
   bulkBtn.onclick = (ev) => {
     ev.stopPropagation(); cleanup();
     if (!bulkLinksModal || !bulkLinksTextarea || !bulkLinksFolderLabel) return;
@@ -1379,6 +1565,17 @@ function openFolderMenu(folder, liElem, btnElem) {
     bulkLinksModal.setAttribute('aria-hidden', 'false');
     bulkLinksTextarea.focus();
   };
+  if (pinToggleBtn) {
+    pinToggleBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      cleanup();
+      const idStr = String(folder.id);
+      if (pinnedRootFolders.has(idStr)) pinnedRootFolders.delete(idStr);
+      else pinnedRootFolders.add(idStr);
+      saveFolderPrefs();
+      renderFolders();
+    };
+  }
   delBtn.onclick = async (ev) => {
     ev.stopPropagation(); cleanup();
     const ok = confirm('Deleting this folder will permanently delete its associated links (links only in this folder). Continue?');
