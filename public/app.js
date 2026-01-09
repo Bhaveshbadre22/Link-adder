@@ -642,6 +642,11 @@ if (logoutBtn) {
     showLoginScreen();
   });
 }
+if (logoutBtn) {
+  logoutBtn.addEventListener('click', () => {
+    openLogoutConfirmModal();
+  });
+}
 
 let avatarMenuEl = null;
 
@@ -1548,10 +1553,30 @@ function populateFolderSelect() {
   // populate multi-select dropdown for folders
   if (!linkFolder) return;
   linkFolder.innerHTML = '<option value="">(No Folder)</option>';
-  folders.forEach(f => {
+  const byId = {};
+  (folders || []).forEach(f => {
+    byId[String(f.id)] = f;
+  });
+
+  function folderDisplayName(f) {
+    if (!f) return '';
+    const parts = [f.name];
+    let current = f;
+    const seen = new Set();
+    while (current.parent_id && !seen.has(current.parent_id)) {
+      seen.add(current.parent_id);
+      const parent = byId[String(current.parent_id)];
+      if (!parent) break;
+      parts.unshift(parent.name);
+      current = parent;
+    }
+    return parts.join(' / ');
+  }
+
+  (folders || []).forEach(f => {
     const opt = document.createElement('option');
     opt.value = f.id;
-    opt.textContent = f.name;
+    opt.textContent = folderDisplayName(f);
     linkFolder.appendChild(opt);
   });
 
@@ -1565,7 +1590,7 @@ function populateFolderSelect() {
       folderMultiPanel.appendChild(empty);
       folderMultiSelected.textContent = 'No folder selected';
     } else {
-      folders.forEach(f => {
+      (folders || []).forEach(f => {
         const label = document.createElement('label');
         const cb = document.createElement('input');
         cb.type = 'checkbox';
@@ -1577,7 +1602,7 @@ function populateFolderSelect() {
           updateFolderMultiSelectedLabel();
         });
         const span = document.createElement('span');
-        span.textContent = f.name;
+        span.textContent = folderDisplayName(f);
         // checkbox first, then text
         label.appendChild(cb);
         label.appendChild(span);
