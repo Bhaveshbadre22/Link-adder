@@ -465,10 +465,46 @@ app.post('/api/links', authRequired, async (req, res) => {
         }
       }
     }
+
+    // create a cross-user notification so others can see new references
+    try {
+      const primaryFolderId = Array.isArray(folder_ids) && folder_ids.length ? folder_ids[0] : null;
+      let folderPath = 'All Links';
+      if (primaryFolderId) {
+        let cursor = await db.get('SELECT id, name, parent_id FROM folders WHERE id = ?', [primaryFolderId]);
+        const segments = [];
+        while (cursor) {
+          segments.unshift(cursor.name);
+          if (!cursor.parent_id) break;
+          cursor = await db.get('SELECT id, name, parent_id FROM folders WHERE id = ?', [cursor.parent_id]);
+        }
+        if (segments.length) folderPath = segments.join(' >> ');
+      }
+      const actorPretty = createdBy ? (createdBy.charAt(0).toUpperCase() + createdBy.slice(1)) : 'Someone';
+      const message = `${actorPretty} added a reference in ${folderPath}.`;
+      await db.run(
+        'INSERT INTO notifications (type, actor, message, link_id, folder_id) VALUES (?, ?, ?, ?, ?)',
+        ['link_added', createdBy, message, link.id, primaryFolderId]
+      );
+    } catch (_e) {
+      // do not block link creation if notification recording fails
+    }
     // return link with folder_ids
     const frows2 = await db.all('SELECT folder_id FROM link_folders WHERE link_id = ?', [link.id]);
     link.folder_ids = frows2.map(r => r.folder_id);
     res.json(link);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cross-user notifications (e.g., when teammates add links)
+app.get('/api/notifications', authRequired, async (req, res) => {
+  try {
+    const rows = await db.all(
+      'SELECT id, type, actor, message, link_id, folder_id, created_at FROM notifications ORDER BY created_at DESC LIMIT 50'
+    );
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

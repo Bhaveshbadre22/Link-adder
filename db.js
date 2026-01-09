@@ -146,6 +146,17 @@ if (client === 'pg') {
       display_name TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
+
+  // simple notifications table for cross-user events
+  rawDb.run(`CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT,
+    actor TEXT,
+    message TEXT,
+    link_id INTEGER,
+    folder_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
   });
 
   dbApi = {

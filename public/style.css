@@ -540,6 +540,24 @@ body.theme-dark .date-separator{
 	margin:0;
 }
 
+.links-helper-cta{
+	margin-top:8px;
+	display:inline-flex;
+	align-items:center;
+	gap:6px;
+	padding:6px 12px;
+	border-radius:999px;
+	border:1px solid rgba(37,99,235,0.35);
+	background:rgba(37,99,235,0.08);
+	color:#1d4ed8;
+	font-size:12px;
+	font-weight:500;
+	cursor:pointer;
+}
+.links-helper-cta:hover{
+	background:rgba(37,99,235,0.14);
+}
+
 .dashboard-game-btn{
 	position:relative;
 	border-radius:999px;
@@ -951,6 +969,24 @@ body.theme-dark .date-separator{
 	font-size:13px;
 	color:#6b7280;
 	text-align:center;
+}
+
+.notifications-cta{
+	margin-top:6px;
+	display:inline-flex;
+	align-items:center;
+	justify-content:center;
+	padding:4px 10px;
+	border-radius:999px;
+	border:1px solid rgba(37,99,235,0.5);
+	background:rgba(37,99,235,0.08);
+	color:#1d4ed8;
+	font-size:11px;
+	font-weight:500;
+	cursor:pointer;
+}
+.notifications-cta:hover{
+	background:rgba(37,99,235,0.16);
 }
 
 /* Confetti celebration overlay when user hits #1 */

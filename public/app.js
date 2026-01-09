@@ -52,6 +52,7 @@ const folderMultiSelected = document.getElementById('folderMultiSelected');
 const folderMultiPanel = document.getElementById('folderMultiPanel');
 const linksEl = document.getElementById('links');
 const linksHeading = document.getElementById('linksHeading');
+const linksHelper = document.getElementById('linksHelper');
 const addLinkNavBtn = document.getElementById('addLinkNavBtn');
 const dashboardTab = document.getElementById('dashboardTab');
 const dashboardSection = document.getElementById('dashboardSection');
@@ -109,6 +110,7 @@ const notificationsList = document.getElementById('notificationsList');
 const notificationsBadge = document.getElementById('notificationsBadge');
 const notificationsClear = document.getElementById('notificationsClear');
 let notifications = [];
+let notificationsPollId = null;
 let currentUser = null;
 let lastLeaderboardRank = null;
 let confettiTimeout = null;
@@ -207,6 +209,13 @@ function enterApp() {
   if (appContainer) appContainer.style.display = 'flex';
   showDashboard();
   loadFolders().then(loadLinks);
+  // start polling for cross-user notifications
+  if (notificationsPollId) {
+    clearInterval(notificationsPollId);
+    notificationsPollId = null;
+  }
+  fetchNotificationsFromServer();
+  notificationsPollId = setInterval(fetchNotificationsFromServer, 25000);
   // after a successful login, gently suggest the guided tour
   if (typeof openTourPrompt === 'function') {
     setTimeout(() => {
@@ -335,11 +344,11 @@ function getDashboardTourSteps() {
       });
     }
   }
-  if (linkForm) {
+  if (addLinkNavBtn) {
     steps.push({
       title: 'Add links to folders',
-      body: 'Paste a URL, add an optional note, then choose one or more folders. Click “Add Link” to save it to your workspace.',
-      getTarget: () => linkForm
+      body: 'Click the "Add Link" button in the sidebar to open the link form. Paste a URL, add an optional note, choose one or more folders, then click "Add Link" to save it.',
+      getTarget: () => addLinkNavBtn
     });
   }
   const statsEl = document.getElementById('dashboardStats');
@@ -395,15 +404,27 @@ function positionTourUI(step) {
   tourHighlight.style.left = highlightLeft + 'px';
   tourHighlight.style.width = highlightWidth + 'px';
   tourHighlight.style.height = highlightHeight + 'px';
+  const isAddLinkStep = step.title === 'Add links to folders';
 
-  let top = highlightTop + highlightHeight + 16;
-  const estimatedHeight = 180;
-  if (top + estimatedHeight > window.innerHeight - 16) {
-    top = highlightTop - estimatedHeight - 16;
+  let top;
+  let left;
+
+  if (isAddLinkStep) {
+    // For the Add Link step, always place the tooltip to the side
+    // of the sidebar button so it doesn't appear above it.
+    top = Math.max(rect.top - 10, 16);
+    left = rect.right + 20;
+  } else {
+    top = highlightTop + highlightHeight + 16;
+    const estimatedHeight = 180;
+    if (top + estimatedHeight > window.innerHeight - 16) {
+      top = highlightTop - estimatedHeight - 16;
+    }
+    if (top < 16) top = 16;
+
+    left = highlightLeft;
   }
-  if (top < 16) top = 16;
 
-  let left = highlightLeft;
   if (left + maxWidth + 16 > window.innerWidth) {
     left = window.innerWidth - maxWidth - 16;
   }
@@ -1673,10 +1694,45 @@ function buildFolderPathLabel() {
   return segments.join(' >> ');
 }
 
+function updateLinksHelper() {
+  if (!linksHelper) return;
+
+  // All Links view: explain the global Add Link flow
+  if (currentFolder == null) {
+    linksHelper.style.display = 'block';
+    linksHelper.innerHTML = `
+      <div class="links-helper-title">How to add a new link</div>
+      <p>Use the <strong>Add Link</strong> button in the sidebar: paste your URL, add an optional note, choose one or more folders, then click <strong>Add Link</strong>. Saved links will appear here, grouped by date.</p>
+    `;
+    return;
+  }
+
+  // Inside a specific folder: show CTA to add a link and motivational text
+  linksHelper.style.display = 'block';
+  linksHelper.innerHTML = `
+    <div class="links-helper-title">Add a link to this folder</div>
+    <p>Increase your work quality by adding quality reference links today. Use the <strong>Add Link</strong> button in the sidebar, then select this folder when saving.</p>
+    <button type="button" class="links-helper-cta">Add a link</button>
+  `;
+
+  const ctaBtn = linksHelper.querySelector('.links-helper-cta');
+  if (ctaBtn) {
+    ctaBtn.onclick = () => {
+      currentFolder = null;
+      showLinksView();
+      updateLinksHeading();
+      if (addLinkSection && typeof addLinkSection.scrollIntoView === 'function') {
+        addLinkSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+  }
+}
+
 function updateLinksHeading() {
   if (!linksHeading) return;
   const label = buildFolderPathLabel();
   linksHeading.textContent = label || 'All Links';
+  updateLinksHelper();
 }
 
 function renderFolders() {
@@ -2256,12 +2312,39 @@ function renderNotifications() {
       t.textContent = new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       item.appendChild(t);
     }
+    if (n.type === 'link_added' && n.folderId) {
+      const cta = document.createElement('button');
+      cta.type = 'button';
+      cta.className = 'notifications-cta';
+      cta.textContent = 'Check now';
+      cta.onclick = () => {
+        currentFolder = n.folderId;
+        showLinksView();
+        loadLinks();
+        renderFolders();
+        updateLinksHeading();
+        if (notificationsPanel) {
+          notificationsPanel.style.display = 'none';
+          notificationsPanel.setAttribute('aria-hidden', 'true');
+        }
+      };
+      item.appendChild(cta);
+    }
+
     notificationsList.appendChild(item);
   });
 }
 
-function addNotification(message) {
-  const entry = { message, createdAt: Date.now() };
+function addNotification(message, extra) {
+  const entry = {
+    id: extra && extra.id != null ? extra.id : ('local-' + Date.now()),
+    type: (extra && extra.type) || 'general',
+    actor: (extra && extra.actor) || null,
+    linkId: (extra && extra.linkId) || null,
+    folderId: (extra && extra.folderId) || null,
+    message,
+    createdAt: (extra && extra.createdAt) || Date.now()
+  };
   notifications.unshift(entry);
   if (notifications.length > 20) notifications = notifications.slice(0, 20);
   renderNotifications();
@@ -2272,6 +2355,31 @@ function addNotification(message) {
   if (notificationsPanel) {
     notificationsPanel.style.display = 'block';
     notificationsPanel.setAttribute('aria-hidden', 'false');
+  }
+}
+
+async function fetchNotificationsFromServer() {
+  if (!currentUser) return;
+  try {
+    const rows = await api('/api/notifications');
+    const filtered = (rows || []).filter(n => !n.actor || n.actor !== currentUser);
+    notifications = filtered.map((n) => ({
+      id: n.id,
+      type: n.type || 'link_added',
+      actor: n.actor || null,
+      linkId: n.link_id || null,
+      folderId: n.folder_id || null,
+      message: n.message,
+      createdAt: n.created_at ? new Date(n.created_at).getTime() : Date.now()
+    }));
+    renderNotifications();
+    if (notificationsBadge) {
+      const count = notifications.length;
+      notificationsBadge.textContent = String(count > 9 ? '9+' : count);
+      notificationsBadge.style.display = count ? 'flex' : 'none';
+    }
+  } catch (e) {
+    // ignore notification fetch errors
   }
 }
 
