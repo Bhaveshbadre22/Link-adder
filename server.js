@@ -94,6 +94,8 @@ app.post('/api/login', (req, res) => {
   res.json({ token, username: canonicalUsername });
 });
 
+// Logout endpoint (no real action needed for JWT-based auth)
+
 app.post('/api/logout', authRequired, (req, res) => {
   res.json({ success: true });
 });
