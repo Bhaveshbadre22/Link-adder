@@ -51,6 +51,8 @@ const folderMultiSelect = document.getElementById('folderMultiSelect');
 const folderMultiSelected = document.getElementById('folderMultiSelected');
 const folderMultiPanel = document.getElementById('folderMultiPanel');
 const linksEl = document.getElementById('links');
+const linksHeading = document.getElementById('linksHeading');
+const addLinkNavBtn = document.getElementById('addLinkNavBtn');
 const dashboardTab = document.getElementById('dashboardTab');
 const dashboardSection = document.getElementById('dashboardSection');
 const addLinkSection = document.getElementById('addLinkSection');
@@ -97,6 +99,9 @@ const tourBodyEl = document.getElementById('tourBody');
 const tourStepCountEl = document.getElementById('tourStepCount');
 const tourNextBtn = document.getElementById('tourNext');
 const tourSkipBtn = document.getElementById('tourSkip');
+const tourPrompt = document.getElementById('tourPrompt');
+const tourPromptStart = document.getElementById('tourPromptStart');
+const tourPromptClose = document.getElementById('tourPromptClose');
 
 // simple in-memory notification center state
 const notificationsPanel = document.getElementById('notificationsPanel');
@@ -122,6 +127,7 @@ const sidebarNavTargets = document.querySelectorAll('[data-nav-target]');
 
 function showDashboard() {
   if (dashboardTab) dashboardTab.classList.add('active');
+  if (addLinkNavBtn) addLinkNavBtn.classList.remove('active');
   dashboardSection.style.display = 'block';
   addLinkSection.style.display = 'none';
   linksSection.style.display = 'none';
@@ -132,13 +138,26 @@ function showDashboard() {
 }
 function showLinksView() {
   if (dashboardTab) dashboardTab.classList.remove('active');
+  if (addLinkNavBtn) addLinkNavBtn.classList.add('active');
   dashboardSection.style.display = 'none';
-  addLinkSection.style.display = 'block';
+  const shouldShowAddForm = currentFolder === null;
+  addLinkSection.style.display = shouldShowAddForm ? 'block' : 'none';
   linksSection.style.display = 'block';
   if (gameSection) gameSection.style.display = 'none';
 }
 if (dashboardTab) {
   dashboardTab.onclick = showDashboard;
+}
+
+if (addLinkNavBtn) {
+  addLinkNavBtn.addEventListener('click', () => {
+    currentFolder = null;
+    showLinksView();
+    updateLinksHeading();
+    if (addLinkSection && typeof addLinkSection.scrollIntoView === 'function') {
+      addLinkSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
 }
 
 // handle primary sidebar navigation (dashboard/links)
@@ -188,6 +207,12 @@ function enterApp() {
   if (appContainer) appContainer.style.display = 'flex';
   showDashboard();
   loadFolders().then(loadLinks);
+  // after a successful login, gently suggest the guided tour
+  if (typeof openTourPrompt === 'function') {
+    setTimeout(() => {
+      openTourPrompt();
+    }, 600);
+  }
 }
 
 // expose for api 401 handlers if needed
@@ -409,13 +434,29 @@ function showTourStep(index) {
     positionTourUI(step);
   }, 350);
 }
+function openTourPrompt() {
+  if (!tourPrompt || !helpTourBtn) return;
+  const card = tourPrompt.querySelector('.tour-prompt-card');
+  if (card) {
+    const rect = helpTourBtn.getBoundingClientRect();
+    const offsetTop = rect.bottom + 10;
+    const offsetRight = Math.max(16, window.innerWidth - rect.right);
+    card.style.top = offsetTop + 'px';
+    card.style.right = offsetRight + 'px';
+  }
+  tourPrompt.style.display = 'block';
+  tourPrompt.setAttribute('aria-hidden', 'false');
+}
 
-if (helpTourBtn && tourOverlay) {
+function closeTourPrompt() {
+  if (!tourPrompt) return;
+  tourPrompt.style.display = 'none';
+  tourPrompt.setAttribute('aria-hidden', 'true');
+}
+
+if (helpTourBtn) {
   helpTourBtn.addEventListener('click', () => {
-    tourSteps = getDashboardTourSteps();
-    if (!tourSteps.length) return;
-    openTourOverlay();
-    showTourStep(0);
+    openTourPrompt();
   });
 }
 
@@ -439,6 +480,30 @@ if (tourOverlay) {
   tourOverlay.addEventListener('click', (e) => {
     if (e.target === tourOverlay) {
       closeTourOverlay();
+    }
+  });
+}
+
+if (tourPromptStart) {
+  tourPromptStart.addEventListener('click', () => {
+    closeTourPrompt();
+    tourSteps = getDashboardTourSteps();
+    if (!tourSteps.length) return;
+    openTourOverlay();
+    showTourStep(0);
+  });
+}
+
+if (tourPromptClose) {
+  tourPromptClose.addEventListener('click', () => {
+    closeTourPrompt();
+  });
+}
+
+if (tourPrompt) {
+  tourPrompt.addEventListener('click', (e) => {
+    if (e.target === tourPrompt) {
+      closeTourPrompt();
     }
   });
 }
@@ -1176,11 +1241,70 @@ async function loadDashboardStats() {
   const foldersCanvas = document.getElementById('foldersPieChart');
   const usersCanvas = document.getElementById('usersMonthChart');
   const usersLeaderboardEl = document.getElementById('usersLeaderboard');
-  if (statsBox) statsBox.innerHTML = '<div>Loading...</div>';
+  if (statsBox) {
+    statsBox.innerHTML = '';
+    for (let i = 0; i < 4; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'stat-box skeleton-card';
+      sk.innerHTML = '<div class="stat-label skeleton skeleton-text sm" style="width:70%"></div>'+
+                     '<div class="stat-value skeleton skeleton-text lg" style="width:40%;margin-top:6px"></div>';
+      statsBox.appendChild(sk);
+    }
+  }
   if (monthCanvas) monthCanvas.style.display = 'none';
   if (foldersCanvas) foldersCanvas.style.display = 'none';
   if (usersCanvas) usersCanvas.style.display = 'none';
-   if (usersLeaderboardEl) usersLeaderboardEl.innerHTML = '';
+  if (monthCanvas && monthCanvas.parentElement) {
+    const parent = monthCanvas.parentElement;
+    parent.querySelectorAll('.chart-skeleton').forEach(el => el.remove());
+    const sk = document.createElement('div');
+    sk.className = 'chart-skeleton';
+    for (let i = 0; i < 3; i++) {
+      const line = document.createElement('div');
+      line.className = 'skeleton skeleton-text';
+      line.style.width = (80 - i * 15) + '%';
+      sk.appendChild(line);
+    }
+    parent.appendChild(sk);
+  }
+  if (foldersCanvas && foldersCanvas.parentElement) {
+    const parent = foldersCanvas.parentElement;
+    parent.querySelectorAll('.chart-skeleton').forEach(el => el.remove());
+    const sk = document.createElement('div');
+    sk.className = 'chart-skeleton';
+    for (let i = 0; i < 3; i++) {
+      const line = document.createElement('div');
+      line.className = 'skeleton skeleton-text';
+      line.style.width = (80 - i * 15) + '%';
+      sk.appendChild(line);
+    }
+    parent.appendChild(sk);
+  }
+  if (usersCanvas && usersCanvas.parentElement) {
+    const parent = usersCanvas.parentElement;
+    parent.querySelectorAll('.chart-skeleton').forEach(el => el.remove());
+    const sk = document.createElement('div');
+    sk.className = 'chart-skeleton';
+    for (let i = 0; i < 3; i++) {
+      const line = document.createElement('div');
+      line.className = 'skeleton skeleton-text';
+      line.style.width = (80 - i * 15) + '%';
+      sk.appendChild(line);
+    }
+    parent.appendChild(sk);
+  }
+  if (usersLeaderboardEl) {
+    usersLeaderboardEl.innerHTML = '';
+    const sk = document.createElement('div');
+    sk.className = 'chart-skeleton';
+    for (let i = 0; i < 3; i++) {
+      const line = document.createElement('div');
+      line.className = 'skeleton skeleton-text';
+      line.style.width = (70 - i * 20) + '%';
+      sk.appendChild(line);
+    }
+    usersLeaderboardEl.appendChild(sk);
+  }
   try {
     const stats = await api('/api/dashboard');
     if (statsBox) {
@@ -1441,7 +1565,9 @@ async function loadDashboardStats() {
         usersLeaderboardEl.appendChild(container);
       }
     }
+    document.querySelectorAll('.chart-skeleton').forEach(el => el.remove());
   } catch (e) {
+    document.querySelectorAll('.chart-skeleton').forEach(el => el.remove());
     if (statsBox) statsBox.innerHTML = '<div class="muted">Failed to load stats.</div>';
     if (monthCanvas) monthCanvas.style.display = 'none';
     if (foldersCanvas) foldersCanvas.style.display = 'none';
@@ -1491,6 +1617,7 @@ function saveFolderPrefs() {
 loadFolderPrefs();
 
 async function loadFolders() {
+  renderFoldersSkeleton();
   folders = await api('/api/folders');
   // ensure root-level order list is in sync with current folders
   const roots = (folders || []).filter(f => !f.parent_id);
@@ -1510,6 +1637,46 @@ async function loadFolders() {
   saveFolderPrefs();
   renderFolders();
   populateFolderSelect();
+  updateLinksHeading();
+}
+
+function renderFoldersSkeleton() {
+  if (!foldersEl) return;
+  foldersEl.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    const li = document.createElement('li');
+    li.className = 'folder';
+    const row = document.createElement('div');
+    row.className = 'folder-row';
+    const line = document.createElement('div');
+    line.className = 'skeleton skeleton-text lg';
+    line.style.width = (70 - i * 5) + '%';
+    row.appendChild(line);
+    li.appendChild(row);
+    foldersEl.appendChild(li);
+  }
+}
+
+function buildFolderPathLabel() {
+  if (!folders || !folders.length || currentFolder == null) return 'All Links';
+  const byId = {};
+  folders.forEach(f => { byId[String(f.id)] = f; });
+  const segments = [];
+  let cursor = byId[String(currentFolder)] || null;
+  while (cursor) {
+    segments.unshift(cursor.name);
+    if (!cursor.parent_id) break;
+    cursor = byId[String(cursor.parent_id)] || null;
+  }
+  if (!segments.length) return 'All Links';
+  if (segments.length === 1) return segments[0];
+  return segments.join(' >> ');
+}
+
+function updateLinksHeading() {
+  if (!linksHeading) return;
+  const label = buildFolderPathLabel();
+  linksHeading.textContent = label || 'All Links';
 }
 
 function renderFolders() {
@@ -1527,7 +1694,7 @@ function renderFolders() {
   allRow.appendChild(allIcon);
   allRow.appendChild(allLabel);
   liAll.appendChild(allRow);
-  liAll.onclick = () => { currentFolder = null; showLinksView(); loadLinks(); renderFolders(); };
+  liAll.onclick = () => { currentFolder = null; showLinksView(); loadLinks(); renderFolders(); updateLinksHeading(); };
   foldersEl.appendChild(liAll);
   const byParent = {};
   folders.forEach(f => {
@@ -1603,7 +1770,7 @@ function renderFolders() {
 
       const nameSpan = document.createElement('span'); nameSpan.className = 'folder-name';
       nameSpan.textContent = depth > 0 ? '↳ ' + f.name : f.name;
-      nameSpan.onclick = () => { currentFolder = f.id; showLinksView(); loadLinks(); renderFolders(); };
+      nameSpan.onclick = () => { currentFolder = f.id; showLinksView(); loadLinks(); renderFolders(); updateLinksHeading(); };
 
       const btn = document.createElement('button'); btn.className = 'folder-actions'; btn.textContent = '⋮';
       btn.onclick = (e) => { e.stopPropagation(); openFolderMenu(f, li, btn); };
@@ -2296,8 +2463,27 @@ async function loadLinks() {
     }
   }
   const q = params.length ? ('?' + params.join('&')) : '';
+  renderLinksSkeleton();
   const data = await api('/api/links' + q);
   renderLinksGrouped(data || [], presetValue);
+}
+function renderLinksSkeleton() {
+  if (!linksEl) return;
+  linksEl.innerHTML = '';
+  const group = document.createElement('div');
+  group.className = 'date-group';
+  for (let i = 0; i < 4; i++) {
+    const card = document.createElement('div');
+    card.className = 'card skeleton-card';
+    const line1 = document.createElement('div'); line1.className = 'skeleton skeleton-text lg'; line1.style.width = '80%';
+    const line2 = document.createElement('div'); line2.className = 'skeleton skeleton-text'; line2.style.width = '60%';
+    const line3 = document.createElement('div'); line3.className = 'skeleton skeleton-text'; line3.style.width = '40%';
+    card.appendChild(line1);
+    card.appendChild(line2);
+    card.appendChild(line3);
+    group.appendChild(card);
+  }
+  linksEl.appendChild(group);
 }
 function renderLinksGrouped(arr, presetValue) {
   linksEl.innerHTML = '';

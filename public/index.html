@@ -41,6 +41,10 @@
       </div>
       <div class="sidebar-nav">
         <button id="dashboardTab" class="sidebar-tab active">Dashboard</button>
+        <button id="addLinkNavBtn" class="sidebar-tab sidebar-tab-add" type="button">
+          <span class="sidebar-tab-add-icon">＋</span>
+          <span class="sidebar-tab-add-label">Add Link</span>
+        </button>
       </div>
       <div class="sidebar-section sidebar-section-folders">
         <div class="sidebar-section-header">
@@ -150,7 +154,7 @@
 
       <section id="linksSection" style="display:none">
         <div class="links-header">
-          <h2>Links</h2>
+          <h2 id="linksHeading">Links</h2>
           <div class="date-filter">
             <label for="datePreset">Filter:</label>
             <select id="datePreset">
@@ -219,6 +223,14 @@ https://another-site.com/post..."></textarea>
       </div>
     </div>
   </div>
+    <div id="tourPrompt" class="tour-prompt" style="display:none" aria-hidden="true">
+      <div class="tour-prompt-card">
+        <button id="tourPromptClose" type="button" class="tour-prompt-close" aria-label="Dismiss tour suggestion">✕</button>
+        <div class="tour-prompt-title">New here?</div>
+        <p class="tour-prompt-body">Take a quick guided tour to understand how folders, links, and the dashboard work together.</p>
+        <button id="tourPromptStart" type="button" class="btn-primary tour-prompt-start">Start tour</button>
+      </div>
+    </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="/app.js?v=1"></script>
 </body>
