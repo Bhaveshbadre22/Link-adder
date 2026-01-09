@@ -1156,8 +1156,50 @@ async function loadDashboardStats() {
 let folders = [];
 let currentFolder = null;
 
+// Local preferences for root-level folder order and pinned folders
+let rootFolderOrder = [];
+let pinnedRootFolders = new Set();
+
+function loadFolderPrefs() {
+  try {
+    const rawOrder = localStorage.getItem('rootFolderOrder');
+    rootFolderOrder = rawOrder ? JSON.parse(rawOrder) : [];
+  } catch (_e) {
+    rootFolderOrder = [];
+  }
+  try {
+    const rawPinned = localStorage.getItem('pinnedRootFolders');
+    const arr = rawPinned ? JSON.parse(rawPinned) : [];
+    pinnedRootFolders = new Set(arr.map(String));
+  } catch (_e2) {
+    pinnedRootFolders = new Set();
+  }
+}
+
+function saveFolderPrefs() {
+  try {
+    localStorage.setItem('rootFolderOrder', JSON.stringify(rootFolderOrder || []));
+    localStorage.setItem('pinnedRootFolders', JSON.stringify(Array.from(pinnedRootFolders || [])));
+  } catch (_e) {}
+}
+
+loadFolderPrefs();
+
 async function loadFolders() {
   folders = await api('/api/folders');
+  // ensure root-level order list is in sync with current folders
+  const roots = (folders || []).filter(f => !f.parent_id);
+  const rootIds = roots.map(f => String(f.id));
+  if (!rootFolderOrder || !rootFolderOrder.length) {
+    rootFolderOrder = rootIds.slice();
+  } else {
+    const idSet = new Set(rootIds);
+    rootFolderOrder = rootFolderOrder.filter(id => idSet.has(String(id)));
+    rootIds.forEach(id => {
+      if (!rootFolderOrder.includes(String(id))) rootFolderOrder.push(String(id));
+    });
+  }
+  saveFolderPrefs();
   renderFolders();
   populateFolderSelect();
 }
@@ -1165,7 +1207,7 @@ async function loadFolders() {
 function renderFolders() {
   foldersEl.innerHTML = '';
   const liAll = document.createElement('li');
-  liAll.className = 'folder' + (currentFolder === null ? ' active' : '');
+  liAll.className = 'folder folder-all' + (currentFolder === null ? ' active' : '');
   liAll.textContent = 'All Links';
   liAll.onclick = () => { currentFolder = null; showLinksView(); loadLinks(); renderFolders(); };
   foldersEl.appendChild(liAll);
@@ -1177,10 +1219,32 @@ function renderFolders() {
   });
 
   function renderBranch(parentId, depth) {
-    const list = byParent[parentId] || [];
+    let list = byParent[parentId] || [];
+    // For root-level folders, apply pinned + custom ordering
+    if (parentId === null) {
+      const pinned = [];
+      const normal = [];
+      list.forEach(f => {
+        (pinnedRootFolders.has(String(f.id)) ? pinned : normal).push(f);
+      });
+      function sortByOrder(arr) {
+        return arr.slice().sort((a, b) => {
+          const aId = String(a.id);
+          const bId = String(b.id);
+          const ai = rootFolderOrder.indexOf(aId);
+          const bi = rootFolderOrder.indexOf(bId);
+          const ap = ai === -1 ? Number.MAX_SAFE_INTEGER : ai;
+          const bp = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
+          return ap - bp;
+        });
+      }
+      list = sortByOrder(pinned).concat(sortByOrder(normal));
+    }
     list.forEach(f => {
       const li = document.createElement('li');
       li.className = 'folder depth-' + depth + (currentFolder === f.id ? ' active' : '');
+      li.dataset.id = String(f.id);
+
       const row = document.createElement('div'); row.className = 'folder-row';
       if (depth > 0) {
         row.style.marginLeft = (depth * 18) + 'px';
@@ -1190,7 +1254,72 @@ function renderFolders() {
       nameSpan.textContent = depth > 0 ? '↳ ' + f.name : f.name;
       nameSpan.onclick = () => { currentFolder = f.id; showLinksView(); loadLinks(); renderFolders(); };
       btn.onclick = (e) => { e.stopPropagation(); openFolderMenu(f, li, btn); };
-      row.appendChild(btn); row.appendChild(nameSpan); li.appendChild(row); foldersEl.appendChild(li);
+      // Pin button for root-level folders
+      if (depth === 0) {
+        const pinBtn = document.createElement('button');
+        pinBtn.type = 'button';
+        const idStr = String(f.id);
+        const pinned = pinnedRootFolders.has(idStr);
+        pinBtn.className = 'folder-pin' + (pinned ? ' pinned' : '');
+        pinBtn.title = pinned ? 'Unpin folder' : 'Pin folder';
+        pinBtn.textContent = pinned ? '★' : '☆';
+        pinBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (pinnedRootFolders.has(idStr)) pinnedRootFolders.delete(idStr);
+          else pinnedRootFolders.add(idStr);
+          saveFolderPrefs();
+          renderFolders();
+        };
+        row.appendChild(pinBtn);
+      }
+      row.appendChild(nameSpan);
+      row.appendChild(btn);
+      li.appendChild(row);
+
+      // Drag-and-drop ordering for root-level folders
+      if (depth === 0) {
+        li.draggable = true;
+        li.addEventListener('dragstart', (e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(f.id));
+          li.classList.add('dragging');
+        });
+        li.addEventListener('dragend', () => {
+          li.classList.remove('dragging');
+          foldersEl.querySelectorAll('.folder.drag-over').forEach(el => el.classList.remove('drag-over'));
+        });
+        li.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          li.classList.add('drag-over');
+        });
+        li.addEventListener('dragleave', () => {
+          li.classList.remove('drag-over');
+        });
+        li.addEventListener('drop', (e) => {
+          e.preventDefault();
+          li.classList.remove('drag-over');
+          const sourceId = e.dataTransfer.getData('text/plain');
+          const targetId = String(f.id);
+          if (!sourceId || sourceId === targetId) return;
+          const srcFolder = folders.find(x => String(x.id) === String(sourceId));
+          const tgtFolder = folders.find(x => String(x.id) === targetId);
+          if (!srcFolder || !tgtFolder) return;
+          if ((srcFolder.parent_id || null) !== (tgtFolder.parent_id || null)) return; // only reorder siblings
+          const sId = String(sourceId);
+          const tId = targetId;
+          const sIdx = rootFolderOrder.indexOf(sId);
+          const tIdx = rootFolderOrder.indexOf(tId);
+          if (sIdx === -1 || tIdx === -1) return;
+          rootFolderOrder.splice(sIdx, 1);
+          const newIndex = rootFolderOrder.indexOf(tId);
+          rootFolderOrder.splice(newIndex, 0, sId);
+          saveFolderPrefs();
+          renderFolders();
+        });
+      }
+
+      foldersEl.appendChild(li);
       renderBranch(f.id, depth + 1);
     });
   }
@@ -1219,10 +1348,9 @@ function openFolderMenu(folder, liElem, btnElem) {
   function onDoc(ev) { if (!menu.contains(ev.target) && ev.target !== btnElem) cleanup(); }
   document.addEventListener('click', onDoc);
   renameBtn.onclick = async (ev) => {
-    ev.stopPropagation(); cleanup();
-    const newName = prompt('Rename folder', folder.name);
-    if (!newName || !newName.trim()) return;
-    try { await api('/api/folders/' + folder.id, { method: 'PUT', body: JSON.stringify({ name: newName.trim() }) }); await loadFolders(); await loadLinks(); showToast('Folder renamed'); } catch (e) { showToast('Rename failed', 'error'); }
+    ev.stopPropagation();
+    cleanup();
+    openFolderRenameModal(folder);
   };
   subfolderBtn.onclick = async (ev) => {
     ev.stopPropagation(); cleanup();
@@ -1273,6 +1401,105 @@ if (bulkLinksModal) {
       closeBulkLinksModal();
     }
   });
+}
+
+function openFolderRenameModal(folder) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay folder-rename-modal';
+  overlay.setAttribute('aria-hidden', 'false');
+
+  const card = document.createElement('div');
+  card.className = 'modal-card';
+
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Rename folder';
+  const subtitle = document.createElement('p');
+  subtitle.className = 'modal-subtitle';
+  subtitle.textContent = folder.name;
+  header.appendChild(h2);
+  header.appendChild(subtitle);
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+  const label = document.createElement('label');
+  label.className = 'modal-label';
+  label.textContent = 'New name';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'modal-input';
+  input.value = folder.name;
+  body.appendChild(label);
+  body.appendChild(input);
+
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn-secondary';
+  cancelBtn.textContent = 'Cancel';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'btn-primary';
+  saveBtn.textContent = 'Save';
+  footer.appendChild(cancelBtn);
+  footer.appendChild(saveBtn);
+
+  card.appendChild(header);
+  card.appendChild(body);
+  card.appendChild(footer);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  function close() {
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.removeChild(overlay);
+  }
+
+  cancelBtn.onclick = () => close();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+
+  function doSave() {
+    const newName = (input.value || '').trim();
+    if (!newName || newName === folder.name) {
+      close();
+      return;
+    }
+    (async () => {
+      try {
+        await api('/api/folders/' + folder.id, {
+          method: 'PUT',
+          body: JSON.stringify({ name: newName })
+        });
+        await loadFolders();
+        await loadLinks();
+        showToast('Folder renamed');
+      } catch (_e) {
+        showToast('Rename failed', 'error');
+      } finally {
+        close();
+      }
+    })();
+  }
+
+  saveBtn.onclick = () => doSave();
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
+  });
+
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 0);
 }
 
 if (bulkLinksSave) {
