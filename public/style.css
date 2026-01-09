@@ -355,6 +355,33 @@ button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-r
 	}
 }
 
+/* On small mobile screens, hide the hero video and center only the login card */
+@media (max-width:600px){
+	.login-screen{
+		align-items:center;
+		justify-content:center;
+	}
+	.login-shell{
+		height:auto;
+		max-width:100%;
+		flex-direction:column;
+		justify-content:center;
+		align-items:center;
+	}
+	.login-left{
+		display:none;
+	}
+	.login-right{
+		flex:0 1 auto;
+		width:100%;
+		padding:24px 16px;
+	}
+	.login-right-inner{
+		width:100%;
+		max-width:360px;
+	}
+}
+
 .image-preview-wrap{
 	position:relative;
 }
