@@ -64,6 +64,7 @@ const sidebarToggle = document.getElementById('sidebarToggle');
 const themeToggle = document.getElementById('themeToggle');
 const notificationsBtn = document.getElementById('notificationsBtn');
 const logoutBtn = document.getElementById('logoutBtn');
+const helpTourBtn = document.getElementById('helpTourBtn');
 const imagePreviewOverlay = document.getElementById('imagePreviewOverlay');
 const imagePreviewImg = document.getElementById('imagePreviewImg');
 const imagePreviewClose = document.getElementById('imagePreviewClose');
@@ -87,6 +88,16 @@ const bulkLinksCancel = document.getElementById('bulkLinksCancel');
 const bulkLinksSave = document.getElementById('bulkLinksSave');
 let bulkTargetFolderId = null;
 
+// in-app guided tour elements (dashboard help)
+const tourOverlay = document.getElementById('tourOverlay');
+const tourHighlight = document.getElementById('tourHighlight');
+const tourTooltip = document.getElementById('tourTooltip');
+const tourTitleEl = document.getElementById('tourTitle');
+const tourBodyEl = document.getElementById('tourBody');
+const tourStepCountEl = document.getElementById('tourStepCount');
+const tourNextBtn = document.getElementById('tourNext');
+const tourSkipBtn = document.getElementById('tourSkip');
+
 // simple in-memory notification center state
 const notificationsPanel = document.getElementById('notificationsPanel');
 const notificationsList = document.getElementById('notificationsList');
@@ -99,6 +110,10 @@ let confettiTimeout = null;
 let gameStatus = [];
 let gameTimerId = null;
 let gameRemaining = 0;
+
+// state for the contextual dashboard tour
+let tourSteps = [];
+let currentTourStepIndex = 0;
 
 // sidebar menu elements
 const sidebarMenuGroups = document.querySelectorAll('[data-menu-group]');
@@ -244,6 +259,193 @@ document.addEventListener('keydown', (e) => {
     closeImagePreview();
     closeVideoPreview();
   }
+});
+
+// --- Dashboard guided tour (help question-mark icon) ---
+function getDashboardTourSteps() {
+  const steps = [];
+  if (dashboardGameBtn) {
+    steps.push({
+      title: 'Link Smart Quiz',
+      body: 'Test your knowledge about organizing and sharing links. Great for onboarding or a quick refresher.',
+      getTarget: () => dashboardGameBtn
+    });
+  }
+  if (themeToggle) {
+    steps.push({
+      title: 'Theme toggle',
+      body: 'Switch between light and dark mode so the dashboard matches your workspace and lighting.',
+      getTarget: () => themeToggle
+    });
+  }
+  if (notificationsBtn) {
+    steps.push({
+      title: 'Notifications',
+      body: 'Stay on top of bulk imports, new links, and other key updates here.',
+      getTarget: () => notificationsBtn
+    });
+  }
+  if (newFolderToggle) {
+    steps.push({
+      title: 'Create folders',
+      body: 'Click “New” to create folders or subfolders. Use folders to group links by project, team, or topic.',
+      getTarget: () => newFolderToggle
+    });
+  }
+  if (foldersEl) {
+    steps.push({
+      title: 'Folder list & drag',
+      body: 'Drag root folders up or down to reorder them. Use the chevron to expand nested folders.',
+      getTarget: () => foldersEl
+    });
+  }
+  const foldersHeaderActions = document.querySelector('.sidebar-section-folders .sidebar-section-header');
+  if (foldersHeaderActions && foldersEl) {
+    const sampleThreeDots = foldersEl.querySelector('.folder-actions');
+    if (sampleThreeDots) {
+      steps.push({
+        title: 'Folder menu (⋮)',
+        body: 'Use the three dots on a folder to rename, add subfolders, duplicate the folder tree, pin it, add bulk links, or delete.',
+        getTarget: () => sampleThreeDots
+      });
+    }
+  }
+  if (linkForm) {
+    steps.push({
+      title: 'Add links to folders',
+      body: 'Paste a URL, add an optional note, then choose one or more folders. Click “Add Link” to save it to your workspace.',
+      getTarget: () => linkForm
+    });
+  }
+  const statsEl = document.getElementById('dashboardStats');
+  if (statsEl) {
+    steps.push({
+      title: 'Key metrics',
+      body: 'At-a-glance stats for total links, folders, and recent activity help you see usage instantly.',
+      getTarget: () => statsEl
+    });
+  }
+  const chartsEl = document.getElementById('dashboardCharts');
+  if (chartsEl) {
+    steps.push({
+      title: 'Analytics',
+      body: 'Charts show how links are added and used across folders and users over time.',
+      getTarget: () => chartsEl
+    });
+  }
+  return steps;
+}
+
+function openTourOverlay() {
+  if (!tourOverlay) return;
+  tourOverlay.style.display = 'block';
+  document.body.classList.add('tour-open');
+}
+
+function closeTourOverlay() {
+  if (!tourOverlay) return;
+  tourOverlay.style.display = 'none';
+  document.body.classList.remove('tour-open');
+  if (tourHighlight) {
+    tourHighlight.style.display = 'none';
+  }
+}
+
+function positionTourUI(step) {
+  if (!step || !tourHighlight || !tourTooltip) return;
+  const target = step.getTarget && step.getTarget();
+  if (!target) return;
+
+  const rect = target.getBoundingClientRect();
+  const padding = 8;
+  const maxWidth = Math.max(260, Math.min(320, window.innerWidth - 32));
+
+  const highlightTop = Math.max(rect.top - padding, 8);
+  const highlightLeft = Math.max(rect.left - padding, 8);
+  const highlightWidth = Math.min(rect.width + padding * 2, window.innerWidth - 16);
+  const highlightHeight = Math.min(rect.height + padding * 2, window.innerHeight - 16);
+
+  tourHighlight.style.display = 'block';
+  tourHighlight.style.top = highlightTop + 'px';
+  tourHighlight.style.left = highlightLeft + 'px';
+  tourHighlight.style.width = highlightWidth + 'px';
+  tourHighlight.style.height = highlightHeight + 'px';
+
+  let top = highlightTop + highlightHeight + 16;
+  const estimatedHeight = 180;
+  if (top + estimatedHeight > window.innerHeight - 16) {
+    top = highlightTop - estimatedHeight - 16;
+  }
+  if (top < 16) top = 16;
+
+  let left = highlightLeft;
+  if (left + maxWidth + 16 > window.innerWidth) {
+    left = window.innerWidth - maxWidth - 16;
+  }
+  if (left < 16) left = 16;
+
+  tourTooltip.style.maxWidth = maxWidth + 'px';
+  tourTooltip.style.top = top + 'px';
+  tourTooltip.style.left = left + 'px';
+}
+
+function showTourStep(index) {
+  if (!tourSteps.length) return;
+  if (index < 0 || index >= tourSteps.length) {
+    closeTourOverlay();
+    return;
+  }
+  currentTourStepIndex = index;
+  const step = tourSteps[index];
+  if (tourTitleEl) tourTitleEl.textContent = step.title;
+  if (tourBodyEl) tourBodyEl.textContent = step.body;
+  if (tourStepCountEl) tourStepCountEl.textContent = (index + 1) + ' of ' + tourSteps.length;
+  if (tourNextBtn) tourNextBtn.textContent = index === tourSteps.length - 1 ? 'Done' : 'Next';
+
+  const target = step.getTarget && step.getTarget();
+  if (!target) return;
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => {
+    positionTourUI(step);
+  }, 350);
+}
+
+if (helpTourBtn && tourOverlay) {
+  helpTourBtn.addEventListener('click', () => {
+    tourSteps = getDashboardTourSteps();
+    if (!tourSteps.length) return;
+    openTourOverlay();
+    showTourStep(0);
+  });
+}
+
+if (tourNextBtn) {
+  tourNextBtn.addEventListener('click', () => {
+    if (currentTourStepIndex >= tourSteps.length - 1) {
+      closeTourOverlay();
+    } else {
+      showTourStep(currentTourStepIndex + 1);
+    }
+  });
+}
+
+if (tourSkipBtn) {
+  tourSkipBtn.addEventListener('click', () => {
+    closeTourOverlay();
+  });
+}
+
+if (tourOverlay) {
+  tourOverlay.addEventListener('click', (e) => {
+    if (e.target === tourOverlay) {
+      closeTourOverlay();
+    }
+  });
+}
+
+window.addEventListener('resize', () => {
+  if (!tourOverlay || tourOverlay.style.display === 'none' || !tourSteps.length) return;
+  positionTourUI(tourSteps[currentTourStepIndex]);
 });
 
 // Login form handling

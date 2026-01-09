@@ -77,6 +77,9 @@
         </div>
         <div class="main-header-right">
           <button id="dashboardGameBtn" type="button" class="dashboard-game-btn">Take Link Smart Quiz</button>
+          <button id="helpTourBtn" class="icon-btn" aria-label="Dashboard help" title="Guide me through this page">
+            ?
+          </button>
           <button id="themeToggle" class="icon-btn" aria-label="Toggle theme" title="Toggle theme">
             🌗
           </button>
@@ -160,6 +163,10 @@
             <input type="date" id="dateCustom" style="display:none;margin-left:8px" />
           </div>
         </div>
+        <div class="links-helper">
+          <div class="links-helper-title">How to add a new link</div>
+          <p>Use the Add Link panel above: paste your URL, add an optional note, choose one or more folders, then click <strong>Add Link</strong>. Saved links will appear here, grouped by date.</p>
+        </div>
         <div id="links"></div>
       </section>
       <section id="gameSection" style="display:none">
@@ -196,6 +203,20 @@ https://another-site.com/post..."></textarea>
     <div class="video-preview-inner">
       <button id="videoPreviewClose" class="video-preview-close" aria-label="Close video preview">✕</button>
       <div id="videoPreviewContent" class="video-preview-content"></div>
+    </div>
+  </div>
+  <div id="tourOverlay" class="tour-overlay" style="display:none" aria-hidden="true">
+    <div id="tourHighlight" class="tour-highlight"></div>
+    <div id="tourTooltip" class="tour-tooltip">
+      <div class="tour-tooltip-header">
+        <span id="tourTitle" class="tour-title"></span>
+        <span id="tourStepCount" class="tour-step-count"></span>
+      </div>
+      <div id="tourBody" class="tour-body"></div>
+      <div class="tour-actions">
+        <button id="tourSkip" type="button" class="btn-secondary tour-skip-btn">Skip</button>
+        <button id="tourNext" type="button" class="btn-primary tour-next-btn">Next</button>
+      </div>
     </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

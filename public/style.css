@@ -447,6 +447,26 @@ body.theme-dark .date-separator{
 .links-header h2{margin:0}
 .date-filter select,input[type=date]{padding:6px;border:1px solid #ddd;border-radius:6px}
 
+.links-helper{
+	margin:6px 0 12px;
+	padding:10px 12px;
+	border-radius:10px;
+	background:linear-gradient(135deg,rgba(3,102,214,0.04),rgba(15,23,42,0.02));
+	border:1px solid #e5e7eb;
+	font-size:13px;
+	color:#4b5563;
+}
+.links-helper-title{
+	font-size:12px;
+	text-transform:uppercase;
+	letter-spacing:0.12em;
+	color:var(--text-muted);
+	margin-bottom:4px;
+}
+.links-helper p{
+	margin:0;
+}
+
 .dashboard-game-btn{
 	border-radius:999px;
 	padding:6px 12px;
@@ -888,6 +908,85 @@ body.theme-dark .date-separator{
 	}
 	100%{
 		transform:translate3d(0,110vh,0) rotateZ(360deg);
+	}
+}
+
+/* Guided dashboard tour (question-mark help icon) */
+body.tour-open{
+	overflow:hidden;
+}
+
+.tour-overlay{
+	position:fixed;
+	inset:0;
+	z-index:12000;
+	pointer-events:auto;
+}
+
+.tour-highlight{
+	position:fixed;
+	border-radius:14px;
+	box-shadow:0 0 0 9999px rgba(15,23,42,0.65);
+	border:2px solid #6366f1;
+	background:transparent;
+	pointer-events:none;
+	transition:top 160ms ease,left 160ms ease,width 160ms ease,height 160ms ease;
+}
+
+.tour-tooltip{
+	position:fixed;
+	background:#ffffff;
+	border-radius:14px;
+	border:1px solid rgba(148,163,184,0.5);
+	box-shadow:0 22px 55px rgba(15,23,42,0.4);
+	padding:14px 16px 12px;
+	font-size:13px;
+	color:#0f172a;
+	max-width:320px;
+}
+
+.tour-tooltip-header{
+	display:flex;
+	align-items:center;
+	justify-content:space-between;
+	gap:8px;
+	margin-bottom:6px;
+}
+
+.tour-title{
+	font-size:14px;
+	font-weight:600;
+	letter-spacing:-0.01em;
+}
+
+.tour-step-count{
+	font-size:11px;
+	text-transform:uppercase;
+	letter-spacing:0.14em;
+	color:var(--text-muted);
+}
+
+.tour-body{
+	font-size:13px;
+	color:#4b5563;
+	line-height:1.5;
+}
+
+.tour-actions{
+	margin-top:10px;
+	display:flex;
+	justify-content:flex-end;
+	gap:8px;
+}
+
+.tour-skip-btn{
+	background:#e5e7eb;
+	color:#111827;
+}
+
+@media (max-width:600px){
+	.tour-tooltip{
+		max-width:90vw;
 	}
 }
 
