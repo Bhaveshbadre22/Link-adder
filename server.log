@@ -1,0 +1,5 @@
+
+> link-storer@0.1.0 start
+> node server.js
+
+Link Storer server running on port 3000
