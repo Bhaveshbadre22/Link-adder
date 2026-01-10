@@ -1,5 +1,17 @@
 const db = require('../db');
 const { getUserFromRequest } = require('./_auth');
+const { createClient } = require('@supabase/supabase-js');
+
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_AVATARS_BUCKET = process.env.SUPABASE_AVATARS_BUCKET || 'avatars';
+
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false }
+  });
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -68,10 +80,10 @@ module.exports = async (req, res) => {
        ORDER BY count DESC`
     );
 
-    const perUserMonth = await db.all(
+    let perUserMonth = await db.all(
       `SELECT u.username,
               u.count,
-              p.avatar_path AS avatar_url
+              p.avatar_path AS avatar_path
        FROM (
          SELECT created_by AS username,
                 COUNT(*) AS count
@@ -84,6 +96,22 @@ module.exports = async (req, res) => {
        LEFT JOIN user_profiles p ON p.username = u.username
        ORDER BY u.count DESC`
     );
+
+    if (Array.isArray(perUserMonth) && supabase) {
+      perUserMonth = perUserMonth.map((row) => {
+        let avatar_url = null;
+        if (row.avatar_path) {
+          const { data } = supabase
+            .storage
+            .from(SUPABASE_AVATARS_BUCKET)
+            .getPublicUrl(row.avatar_path);
+          avatar_url = data && data.publicUrl ? data.publicUrl : null;
+        }
+        return Object.assign({}, row, { avatar_url });
+      });
+    } else if (Array.isArray(perUserMonth)) {
+      perUserMonth = perUserMonth.map((row) => Object.assign({}, row, { avatar_url: null }));
+    }
 
     const payload = {
       links_today: linksToday ? linksToday.c : 0,

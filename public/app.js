@@ -319,6 +319,13 @@ function getDashboardTourSteps() {
       getTarget: () => notificationsBtn
     });
   }
+  if (sidebarProfileAvatar) {
+    steps.push({
+      title: 'Profile photo',
+      body: 'Click your avatar to upload or remove your profile photo. It appears in the sidebar, on link cards, and in the user leaderboard.',
+      getTarget: () => sidebarProfileAvatar
+    });
+  }
   if (newFolderToggle) {
     steps.push({
       title: 'Create folders',
@@ -609,59 +616,70 @@ if (sidebarToggle) {
 // Simple learning game (employee quiz)
 const employeeQuizQuestions = [
   {
-    q: 'What is the safest place to store important work links?',
+    q: 'What is the correct way to create a new folder in Link Storer?',
     options: [
-      'In a personal browser bookmark bar only',
-      'In a shared chat message from months ago',
-      'In an organized team tool with folders and access control',
-      'Screenshot in your phone gallery'
-    ],
-    correct: 2,
-    info: 'Central, organized tools with folders and access rules keep links searchable, backed up, and useful for the whole team.'
-  },
-  {
-    q: 'A teammate sends you a suspicious link. What should you do first?',
-    options: [
-      'Open it quickly to see what it is',
-      'Hover over the URL and verify the domain looks legit',
-      'Forward it to everyone so they are aware',
-      'Ignore it completely forever'
+      'Type the folder name in the link note field',
+      'Click New in the Folders panel on the left',
+      'Right-click anywhere on the dashboard background',
+      'You cannot create folders in this app'
     ],
     correct: 1,
-    info: 'Always verify the real destination (hover or inspect) before clicking. When in doubt, check with IT or security.'
+    info: 'Use the New button in the Folders section of the sidebar, give the folder a clear name, then save it.'
   },
   {
-    q: 'Which note is most helpful next to a saved link?',
+    q: 'How do you add a new link to Link Storer?',
     options: [
-      '"Nice"',
-      '"To read someday"',
-      'A short description of why it matters and when to use it',
-      'Just an emoji'
+      'Paste URLs directly into the browser address bar',
+      'Upload a PDF with all links inside',
+      'Click Add Link in the sidebar, paste the URL, pick folders, and click Add Link',
+      'Send the link to the admin on WhatsApp'
     ],
     correct: 2,
-    info: 'Context-rich notes save time later and help teammates understand when and how to use a resource.'
+    info: 'Use the Add Link button, paste your URL, optionally add a note, select one or more folders, and then click Add Link.'
   },
   {
-    q: 'How often should teams review and clean up old links?',
+    q: 'Can a single link belong to more than one folder?',
     options: [
-      'Never – more links is always better',
-      'Only when storage is full',
-      'On a regular cadence (e.g. monthly or quarterly)',
-      'Only when someone complains'
+      'No, each link can only live in one folder',
+      'Yes, you can select multiple folders from the multi-select when saving the link',
+      'Only admins can do that',
+      'Only if you duplicate the link manually for each folder'
+    ],
+    correct: 1,
+    info: 'When adding a link you can choose multiple folders from the multi-select so the same link appears in several places.'
+  },
+  {
+    q: 'How can you share a saved link directly on WhatsApp from the app?',
+    options: [
+      'Copy the URL from the browser address bar only',
+      'Click the WhatsApp icon/button on the link card',
+      'Share the whole dashboard screenshot',
+      'You cannot share links to WhatsApp'
+    ],
+    correct: 1,
+    info: 'Each link card has a WhatsApp share button that opens WhatsApp with the link pre-filled so you can send it in one tap.'
+  },
+  {
+    q: 'Where can you see who added a link inside Link Storer?',
+    options: [
+      'In the browser history only',
+      'At the very bottom of the dashboard page',
+      'On each link card under Added by with their initial or avatar',
+      'You cannot see who added links'
     ],
     correct: 2,
-    info: 'Regular cleanups keep dashboards relevant, reduce noise, and make it easier to find what you actually need.'
+    info: 'Every link card shows an Added by label with the persons name and avatar so ownership is always clear.'
   },
   {
-    q: 'What is a good way to make shared resources easier to find?',
+    q: 'What does the User Leaderboard (This Month) on the dashboard show?',
     options: [
-      'Use clear folder names and consistent tags',
-      'Rely on people remembering old chat links',
-      'Hide everything in one "Misc" folder',
-      'Store links randomly and search manually each time'
+      'Who has logged in the most times',
+      'Who has created the most folders overall',
+      'Which users added the most links this month, with their avatars',
+      'Random users from your company'
     ],
-    correct: 0,
-    info: 'Consistent naming and folder structure turns a pile of links into a usable knowledge base for everyone.'
+    correct: 2,
+    info: 'The leaderboard highlights the teammates adding the most links this month and uses their avatar so you can see them at a glance.'
   }
 ];
 
@@ -707,10 +725,10 @@ function renderGameIntro() {
   card.className = 'game-card';
   const title = document.createElement('h3');
   title.className = 'game-title';
-  title.textContent = 'Link Smart Quiz';
+  title.textContent = 'Link Storer Quick Quiz';
   const desc = document.createElement('p');
   desc.className = 'game-description';
-  desc.textContent = 'Test your knowledge about smart, secure, and collaborative link habits in a few quick questions.';
+  desc.textContent = 'Learn the main features of Link Storer1ike folders, adding links, WhatsApp sharing, and the leaderboardein a few quick questions.';
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'game-primary-btn';
@@ -1216,6 +1234,17 @@ async function openAvatarCropper(file) {
       });
 
       img.onload = () => {
+        const iw = img.naturalWidth || 0;
+        const ih = img.naturalHeight || 0;
+        if (iw && ih) {
+          if (iw > ih) {
+            img.style.height = '100%';
+            img.style.width = 'auto';
+          } else {
+            img.style.width = '100%';
+            img.style.height = 'auto';
+          }
+        }
         img.style.transform = 'translate(-50%, -50%) scale(1)';
       };
 
@@ -2699,7 +2728,15 @@ function renderLinksGrouped(arr, presetValue) {
         avatar.className = 'card-meta-avatar';
         const rawName = String(l.created_by || '').trim();
         const initial = rawName ? rawName.charAt(0).toUpperCase() : '?';
-        avatar.textContent = initial;
+        const creatorAvatarUrl = l.created_by_avatar_url || null;
+        if (creatorAvatarUrl) {
+          const img = document.createElement('img');
+          img.src = creatorAvatarUrl;
+          img.alt = rawName || 'User';
+          avatar.appendChild(img);
+        } else {
+          avatar.textContent = initial;
+        }
         const label = document.createElement('span');
         label.className = 'card-meta-label';
         let pretty = rawName;
@@ -2831,7 +2868,15 @@ function renderLinksGrouped(arr, presetValue) {
         avatar.className = 'card-meta-avatar';
         const rawName = String(l.created_by || '').trim();
         const initial = rawName ? rawName.charAt(0).toUpperCase() : '?';
-        avatar.textContent = initial;
+        const creatorAvatarUrl = l.created_by_avatar_url || null;
+        if (creatorAvatarUrl) {
+          const img = document.createElement('img');
+          img.src = creatorAvatarUrl;
+          img.alt = rawName || 'User';
+          avatar.appendChild(img);
+        } else {
+          avatar.textContent = initial;
+        }
         const label = document.createElement('span');
         label.className = 'card-meta-label';
         let pretty = rawName;

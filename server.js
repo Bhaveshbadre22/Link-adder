@@ -254,10 +254,10 @@ app.get('/api/dashboard', authRequired, async (req, res) => {
     );
 
     // per-user link counts for current month, with avatars if available
-    const perUserMonth = await db.all(
+    let perUserMonth = await db.all(
       `SELECT u.username,
               u.count,
-              p.avatar_path AS avatar_url
+              p.avatar_path AS avatar_path
        FROM (
          SELECT created_by AS username,
                 COUNT(*) AS count
@@ -270,6 +270,22 @@ app.get('/api/dashboard', authRequired, async (req, res) => {
        LEFT JOIN user_profiles p ON p.username = u.username
        ORDER BY u.count DESC`
     );
+
+    if (Array.isArray(perUserMonth) && supabase) {
+      perUserMonth = perUserMonth.map((row) => {
+        let avatar_url = null;
+        if (row.avatar_path) {
+          const { data } = supabase
+            .storage
+            .from(SUPABASE_AVATARS_BUCKET)
+            .getPublicUrl(row.avatar_path);
+          avatar_url = data && data.publicUrl ? data.publicUrl : null;
+        }
+        return Object.assign({}, row, { avatar_url });
+      });
+    } else if (Array.isArray(perUserMonth)) {
+      perUserMonth = perUserMonth.map((row) => Object.assign({}, row, { avatar_url: null }));
+    }
 
     res.json({
       links_today: linksToday ? linksToday.c : 0,
@@ -542,16 +558,28 @@ app.get('/api/links', authRequired, async (req, res) => {
       }
     }
 
-    const baseSelect = `SELECT DISTINCT l.* FROM links l`;
-    const join = joinFolder ? ' JOIN link_folders lf ON l.id = lf.link_id' : ' LEFT JOIN link_folders lf ON l.id = lf.link_id';
+    const baseSelect = `SELECT DISTINCT l.*, p.avatar_path AS created_by_avatar_path FROM links l`;
+    const userJoin = ' LEFT JOIN user_profiles p ON p.username = l.created_by';
+    const join = joinFolder
+      ? `${userJoin} JOIN link_folders lf ON l.id = lf.link_id`
+      : `${userJoin} LEFT JOIN link_folders lf ON l.id = lf.link_id`;
     const where = whereClauses.length ? ' WHERE ' + whereClauses.join(' AND ') : '';
     const sql = `${baseSelect} ${join} ${where} ORDER BY l.created_at DESC`;
     let rows = await db.all(sql, params) || [];
 
-    // For each link, fetch its folder_ids in a separate portable query
+    // For each link, fetch its folder_ids and resolve creator avatar URL
     for (const row of rows) {
       const frows = await db.all('SELECT folder_id FROM link_folders WHERE link_id = ?', [row.id]);
       row.folder_ids = frows.map(r => r.folder_id);
+      if (row.created_by_avatar_path && supabase) {
+        const { data } = supabase
+          .storage
+          .from(SUPABASE_AVATARS_BUCKET)
+          .getPublicUrl(row.created_by_avatar_path);
+        row.created_by_avatar_url = data && data.publicUrl ? data.publicUrl : null;
+      } else {
+        row.created_by_avatar_url = null;
+      }
     }
 
     res.json(rows);
