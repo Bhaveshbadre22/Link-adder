@@ -601,6 +601,8 @@ async function loadCurrentUserProfile() {
         if (sidebarAvatarFallback) sidebarAvatarFallback.style.display = 'flex';
       }
     }
+    // once we know the current user, recompute per-folder unread counts
+    refreshFolderUnreadCounts();
   } catch (e) {
     // ignore profile errors; user might not have one yet
   }
@@ -961,10 +963,12 @@ if (notificationsBtn && notificationsPanel) {
   notificationsBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const isOpen = notificationsPanel.style.display === 'block';
-    notificationsPanel.style.display = isOpen ? 'none' : 'block';
-    notificationsPanel.setAttribute('aria-hidden', isOpen ? 'true' : 'false');
-    if (!isOpen && notificationsBadge) {
-      notificationsBadge.style.display = notifications.length ? 'flex' : 'none';
+    const nextIsOpen = !isOpen;
+    notificationsPanel.style.display = nextIsOpen ? 'block' : 'none';
+    notificationsPanel.setAttribute('aria-hidden', nextIsOpen ? 'false' : 'true');
+    if (nextIsOpen) {
+      // Mark all current notifications as seen when the panel is opened.
+      markAllNotificationsSeen();
     }
   });
 
@@ -980,7 +984,7 @@ if (notificationsClear && notificationsList && notificationsBadge) {
   notificationsClear.addEventListener('click', () => {
     notifications = [];
     renderNotifications();
-    notificationsBadge.style.display = 'none';
+    markAllNotificationsSeen();
   });
 }
 
@@ -1632,6 +1636,9 @@ let currentFolder = null;
 let rootFolderOrder = [];
 let pinnedRootFolders = new Set();
 let expandedFolders = new Set();
+// Local per-folder activity state: last time each folder was opened, and unread counts
+let folderLastOpened = {};
+let folderUnreadCounts = {};
 
 function loadFolderPrefs() {
   try {
@@ -1664,7 +1671,69 @@ function saveFolderPrefs() {
   } catch (_e) {}
 }
 
+function loadFolderActivityPrefs() {
+  try {
+    const raw = localStorage.getItem('folderLastOpened');
+    folderLastOpened = raw ? JSON.parse(raw) : {};
+  } catch (_e) {
+    folderLastOpened = {};
+  }
+}
+
+function saveFolderActivityPrefs() {
+  try {
+    localStorage.setItem('folderLastOpened', JSON.stringify(folderLastOpened || {}));
+  } catch (_e) {
+    // ignore
+  }
+}
+
+function markFolderOpened(folderId) {
+  if (!folderId) return;
+  const key = String(folderId);
+  folderLastOpened[key] = Date.now();
+  saveFolderActivityPrefs();
+}
+
+async function refreshFolderUnreadCounts() {
+  if (!folders || !folders.length) {
+    folderUnreadCounts = {};
+    return;
+  }
+  const meUsername = currentUser && currentUser.username ? currentUser.username.trim().toLowerCase() : null;
+  const lastOpened = folderLastOpened || {};
+  const counts = {};
+  try {
+    const links = await api('/api/links');
+    (links || []).forEach((l) => {
+      const createdBy = (l.created_by || '').trim().toLowerCase();
+      if (meUsername && createdBy && createdBy === meUsername) return; // ignore own links
+      if (!l.created_at) return;
+      const createdAtMs = new Date(l.created_at).getTime();
+      if (!Number.isFinite(createdAtMs)) return;
+      let fids = [];
+      if (Array.isArray(l.folder_ids) && l.folder_ids.length) {
+        fids = l.folder_ids;
+      } else if (l.folder_id) {
+        fids = [l.folder_id];
+      }
+      fids.forEach((fid) => {
+        const key = String(fid);
+        const seenTs = Number(lastOpened[key] || 0);
+        if (!seenTs || createdAtMs > seenTs) {
+          counts[key] = (counts[key] || 0) + 1;
+        }
+      });
+    });
+    folderUnreadCounts = counts;
+    renderFolders();
+  } catch (_e) {
+    // ignore errors computing unread counts
+  }
+}
+
 loadFolderPrefs();
+loadFolderActivityPrefs();
 
 async function loadFolders() {
   renderFoldersSkeleton();
@@ -1855,7 +1924,24 @@ function renderFolders() {
 
       const nameSpan = document.createElement('span'); nameSpan.className = 'folder-name';
       nameSpan.textContent = depth > 0 ? '↳ ' + f.name : f.name;
-      nameSpan.onclick = () => { currentFolder = f.id; showLinksView(); loadLinks(); renderFolders(); updateLinksHeading(); };
+      nameSpan.onclick = () => {
+        currentFolder = f.id;
+        markFolderOpened(f.id);
+        showLinksView();
+        loadLinks();
+        renderFolders();
+        updateLinksHeading();
+        // refresh unread counts in the background (e.g., if other folders have new links)
+        refreshFolderUnreadCounts();
+      };
+
+      const unreadCount = folderUnreadCounts[idStr] || 0;
+      if (unreadCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'folder-unread-badge';
+        badge.textContent = String(unreadCount > 9 ? '9+' : unreadCount);
+        row.appendChild(badge);
+      }
 
       const btn = document.createElement('button'); btn.className = 'folder-actions'; btn.textContent = '⋮';
       btn.onclick = (e) => { e.stopPropagation(); openFolderMenu(f, li, btn); };
@@ -2348,10 +2434,12 @@ function renderNotifications() {
       cta.textContent = 'Check now';
       cta.onclick = () => {
         currentFolder = n.folderId;
+        markFolderOpened(n.folderId);
         showLinksView();
         loadLinks();
         renderFolders();
         updateLinksHeading();
+        refreshFolderUnreadCounts();
         if (notificationsPanel) {
           notificationsPanel.style.display = 'none';
           notificationsPanel.setAttribute('aria-hidden', 'true');
@@ -2362,6 +2450,56 @@ function renderNotifications() {
 
     notificationsList.appendChild(item);
   });
+}
+
+function getNotificationsLastSeenKey() {
+  if (!currentUser || !currentUser.username) return null;
+  return 'linkstorer:lastSeenNotification:' + currentUser.username;
+}
+
+function getNotificationsLastSeenTimestamp() {
+  const key = getNotificationsLastSeenKey();
+  if (!key || typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const ts = Number(raw);
+    return Number.isFinite(ts) ? ts : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function setNotificationsLastSeenTimestamp(ts) {
+  const key = getNotificationsLastSeenKey();
+  if (!key || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(key, String(ts));
+  } catch (_e) {
+    // ignore storage failures
+  }
+}
+
+function getUnseenNotificationCount() {
+  if (!notifications || !notifications.length) return 0;
+  const lastSeen = getNotificationsLastSeenTimestamp();
+  return notifications.filter((n) => {
+    if (!n) return false;
+    const idStr = n.id != null ? String(n.id) : '';
+    // treat local/in-app notifications (id starting with 'local-') as always seen for the badge
+    if (idStr.startsWith('local-')) return false;
+    if (!n.createdAt) return !lastSeen;
+    return !lastSeen || n.createdAt > lastSeen;
+  }).length;
+}
+
+function markAllNotificationsSeen() {
+  const now = Date.now();
+  setNotificationsLastSeenTimestamp(now);
+  if (notificationsBadge) {
+    notificationsBadge.textContent = '';
+    notificationsBadge.style.display = 'none';
+  }
 }
 
 function addNotification(message, extra) {
@@ -2391,7 +2529,8 @@ async function fetchNotificationsFromServer() {
   if (!currentUser) return;
   try {
     const rows = await api('/api/notifications');
-    const filtered = (rows || []).filter(n => !n.actor || n.actor !== currentUser);
+    const meUsername = currentUser && currentUser.username ? currentUser.username : null;
+    const filtered = (rows || []).filter(n => !meUsername || !n.actor || n.actor !== meUsername);
     notifications = filtered.map((n) => ({
       id: n.id,
       type: n.type || 'link_added',
@@ -2403,9 +2542,14 @@ async function fetchNotificationsFromServer() {
     }));
     renderNotifications();
     if (notificationsBadge) {
-      const count = notifications.length;
-      notificationsBadge.textContent = String(count > 9 ? '9+' : count);
-      notificationsBadge.style.display = count ? 'flex' : 'none';
+      const count = getUnseenNotificationCount();
+      if (count) {
+        notificationsBadge.textContent = String(count > 9 ? '9+' : count);
+        notificationsBadge.style.display = 'flex';
+      } else {
+        notificationsBadge.textContent = '';
+        notificationsBadge.style.display = 'none';
+      }
     }
   } catch (e) {
     // ignore notification fetch errors

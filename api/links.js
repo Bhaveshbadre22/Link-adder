@@ -205,6 +205,25 @@ module.exports = async (req, res) => {
       }
       const frows2 = await db.all('SELECT folder_id FROM link_folders WHERE link_id = ?', [link.id]);
       link.folder_ids = frows2.map(r => r.folder_id);
+      // Best-effort: create cross-user notifications for each folder this link was added to.
+      // If the notifications table does not exist (e.g., older Postgres schema), we ignore the error.
+      try {
+        if (Array.isArray(link.folder_ids) && link.folder_ids.length) {
+          for (const fid of link.folder_ids) {
+            const folder = await db.get('SELECT name FROM folders WHERE id = ?', [fid]);
+            const folderName = folder && folder.name ? folder.name : 'a folder';
+            const actorLabel = createdBy || 'Someone';
+            const message = `${actorLabel} added a new link to "${folderName}".`;
+            await db.run(
+              'INSERT INTO notifications (type, actor, message, link_id, folder_id) VALUES (?, ?, ?, ?, ?)',
+              ['link_added', createdBy || null, message, link.id, fid]
+            );
+          }
+        }
+      } catch (notifyErr) {
+        // Do not fail link creation if notifications cannot be recorded.
+        console.error('Failed to insert notifications for new link', notifyErr);
+      }
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(link));
