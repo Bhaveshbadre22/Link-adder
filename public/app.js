@@ -57,6 +57,7 @@ const addLinkNavBtn = document.getElementById('addLinkNavBtn');
 const dashboardTab = document.getElementById('dashboardTab');
 const dashboardSection = document.getElementById('dashboardSection');
 const addLinkSection = document.getElementById('addLinkSection');
+const addLinkClose = document.getElementById('addLinkClose');
 const linksSection = document.getElementById('linksSection');
 const dashboardGameBtn = document.getElementById('dashboardGameBtn');
 const gameSection = document.getElementById('gameSection');
@@ -84,6 +85,9 @@ const sidebarAvatarFallback = document.getElementById('sidebarAvatarFallback');
 const sidebarProfileName = document.getElementById('sidebarProfileName');
 const avatarFileInput = document.getElementById('avatarFileInput');
 const sidebarProfileAvatar = document.querySelector('.sidebar-profile-avatar');
+const mobileFooterNav = document.getElementById('mobileFooterNav');
+const mobileNavButtons = document.querySelectorAll('[data-mobile-nav]');
+const mobileNavAvatar = document.querySelector('.mobile-nav-avatar');
 const bulkLinksModal = document.getElementById('bulkLinksModal');
 const bulkLinksTextarea = document.getElementById('bulkLinksTextarea');
 const bulkLinksFolderLabel = document.getElementById('bulkLinksFolderLabel');
@@ -127,6 +131,15 @@ const sidebarMenuGroups = document.querySelectorAll('[data-menu-group]');
 const sidebarMenuToggles = document.querySelectorAll('[data-menu-toggle]');
 const sidebarNavTargets = document.querySelectorAll('[data-nav-target]');
 
+function setMobileNavActive(key) {
+  if (!mobileNavButtons || !mobileNavButtons.length) return;
+  mobileNavButtons.forEach((btn) => {
+    const k = btn.getAttribute('data-mobile-nav');
+    if (k === key) btn.classList.add('is-active');
+    else btn.classList.remove('is-active');
+  });
+}
+
 function showDashboard() {
   if (dashboardTab) dashboardTab.classList.add('active');
   if (addLinkNavBtn) addLinkNavBtn.classList.remove('active');
@@ -137,15 +150,42 @@ function showDashboard() {
   if (gameTimerId) { clearInterval(gameTimerId); gameTimerId = null; }
   if (gameTimerOverlay) gameTimerOverlay.textContent = '';
   loadDashboardStats();
+  setMobileNavActive('dashboard');
 }
 function showLinksView() {
   if (dashboardTab) dashboardTab.classList.remove('active');
   if (addLinkNavBtn) addLinkNavBtn.classList.add('active');
   dashboardSection.style.display = 'none';
-  const shouldShowAddForm = currentFolder === null;
-  addLinkSection.style.display = shouldShowAddForm ? 'block' : 'none';
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const shouldShowAddForm = !isMobile && currentFolder === null;
+  if (addLinkSection) addLinkSection.style.display = shouldShowAddForm ? 'block' : 'none';
   linksSection.style.display = 'block';
   if (gameSection) gameSection.style.display = 'none';
+}
+
+function openAddLinkOverlay() {
+  if (!addLinkSection) return;
+  currentFolder = null;
+  showLinksView();
+  updateLinksHeading();
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  if (isMobile && document && document.body) {
+    document.body.classList.add('mobile-add-open');
+  }
+  addLinkSection.style.display = 'block';
+  if (linkUrl) {
+    setTimeout(() => {
+      try { linkUrl.focus(); } catch (_e) {}
+    }, 150);
+  }
+}
+
+function closeAddLinkOverlay() {
+  if (!addLinkSection) return;
+  if (document && document.body) {
+    document.body.classList.remove('mobile-add-open');
+  }
+  addLinkSection.style.display = 'none';
 }
 if (dashboardTab) {
   dashboardTab.onclick = showDashboard;
@@ -153,12 +193,18 @@ if (dashboardTab) {
 
 if (addLinkNavBtn) {
   addLinkNavBtn.addEventListener('click', () => {
-    currentFolder = null;
-    showLinksView();
-    updateLinksHeading();
-    if (addLinkSection && typeof addLinkSection.scrollIntoView === 'function') {
-      addLinkSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+    if (isMobile) {
+      openAddLinkOverlay();
+    } else {
+      currentFolder = null;
+      showLinksView();
+      updateLinksHeading();
+      if (addLinkSection && typeof addLinkSection.scrollIntoView === 'function') {
+        addLinkSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
+    setMobileNavActive('add');
   });
 }
 
@@ -178,6 +224,60 @@ if (sidebarNavTargets && sidebarNavTargets.length) {
         }
       }
     });
+  });
+}
+
+if (mobileFooterNav && mobileNavButtons && mobileNavButtons.length) {
+  mobileNavButtons.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = btn.getAttribute('data-mobile-nav');
+      if (!target) return;
+      if (target === 'folders') {
+        if (typeof window !== 'undefined' && window.innerWidth <= 768 && document && document.body) {
+          const nowHidden = document.body.classList.toggle('mobile-folders-hidden');
+          if (!nowHidden) {
+            const foldersSection = document.querySelector('.sidebar-section-folders') || foldersEl;
+            if (foldersSection && typeof foldersSection.scrollIntoView === 'function') {
+              foldersSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        } else {
+          const foldersSection = document.querySelector('.sidebar-section-folders') || foldersEl;
+          if (foldersSection && typeof foldersSection.scrollIntoView === 'function') {
+            foldersSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+      } else if (target === 'dashboard') {
+        showDashboard();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (target === 'add') {
+        openAddLinkOverlay();
+      } else if (target === 'search') {
+        currentFolder = null;
+        showLinksView();
+        loadLinks();
+        renderFolders();
+        updateLinksHeading();
+        if (linksSection && typeof linksSection.scrollIntoView === 'function') {
+          linksSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } else if (target === 'profile') {
+        if (sidebarProfileAvatar && typeof sidebarProfileAvatar.scrollIntoView === 'function') {
+          sidebarProfileAvatar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        setTimeout(() => {
+          if (typeof openAvatarMenu === 'function') openAvatarMenu();
+        }, 180);
+      }
+      setMobileNavActive(target);
+    });
+  });
+}
+
+if (addLinkClose) {
+  addLinkClose.addEventListener('click', () => {
+    closeAddLinkOverlay();
   });
 }
 
@@ -207,7 +307,17 @@ function showLoginScreen() {
 function enterApp() {
   if (loginScreen) loginScreen.style.display = 'none';
   if (appContainer) appContainer.style.display = 'flex';
-  showDashboard();
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  if (isMobile) {
+    currentFolder = null;
+    showLinksView();
+    setMobileNavActive('search');
+    if (document && document.body) {
+      document.body.classList.add('mobile-folders-hidden');
+    }
+  } else {
+    showDashboard();
+  }
   loadFolders().then(loadLinks);
   // start polling for cross-user notifications
   if (notificationsPollId) {
@@ -599,6 +709,23 @@ async function loadCurrentUserProfile() {
         sidebarAvatarImg.src = '';
         sidebarAvatarImg.style.display = 'none';
         if (sidebarAvatarFallback) sidebarAvatarFallback.style.display = 'flex';
+      }
+    }
+    if (mobileNavAvatar) {
+      const prettyName = me && me.username ? (me.username.charAt(0).toUpperCase() + me.username.slice(1)) : null;
+      mobileNavAvatar.innerHTML = '';
+      mobileNavAvatar.style.backgroundImage = '';
+      mobileNavAvatar.style.backgroundSize = '';
+      mobileNavAvatar.style.backgroundPosition = '';
+      if (me && me.avatar_url) {
+        const img = document.createElement('img');
+        img.src = me.avatar_url;
+        img.alt = prettyName || 'Profile';
+        mobileNavAvatar.appendChild(img);
+      } else if (prettyName) {
+        mobileNavAvatar.textContent = prettyName.charAt(0);
+      } else if (sidebarAvatarFallback && sidebarAvatarFallback.textContent) {
+        mobileNavAvatar.textContent = sidebarAvatarFallback.textContent;
       }
     }
     // once we know the current user, recompute per-folder unread counts
@@ -1831,12 +1958,7 @@ function updateLinksHelper() {
   const ctaBtn = linksHelper.querySelector('.links-helper-cta');
   if (ctaBtn) {
     ctaBtn.onclick = () => {
-      currentFolder = null;
-      showLinksView();
-      updateLinksHeading();
-      if (addLinkSection && typeof addLinkSection.scrollIntoView === 'function') {
-        addLinkSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+      openAddLinkOverlay();
     };
   }
 }

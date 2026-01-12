@@ -137,7 +137,10 @@
         </div>
       </section>
       <section class="add-link" id="addLinkSection" style="display:none">
-        <h2>Add Link</h2>
+        <div class="add-link-header-row">
+          <h2>Add Link</h2>
+          <button id="addLinkClose" type="button" class="add-link-close" aria-label="Close add link form">✕</button>
+        </div>
         <form id="linkForm">
             <input id="linkUrl" placeholder="https://example.com" required />
             <textarea id="linkNote" placeholder="Optional note" rows="2"></textarea>
@@ -231,6 +234,29 @@ https://another-site.com/post..."></textarea>
         <button id="tourPromptStart" type="button" class="btn-primary tour-prompt-start">Start tour</button>
       </div>
     </div>
+    <nav id="mobileFooterNav" class="mobile-footer-nav" aria-label="Main navigation">
+      <button class="mobile-nav-btn" type="button" data-mobile-nav="folders">
+        <span class="mobile-nav-icon">📁</span>
+        <span class="mobile-nav-label">Folders</span>
+      </button>
+        <button class="mobile-nav-btn" type="button" data-mobile-nav="dashboard">
+          <span class="mobile-nav-icon">📊</span>
+          <span class="mobile-nav-label">Dashboard</span>
+        </button>
+      <button class="mobile-nav-btn mobile-nav-add" type="button" data-mobile-nav="add">
+        <span class="mobile-nav-add-pill">
+          <span class="mobile-nav-add-icon">＋</span>
+        </span>
+      </button>
+      <button class="mobile-nav-btn" type="button" data-mobile-nav="search">
+        <span class="mobile-nav-icon">🔍</span>
+        <span class="mobile-nav-label">Links</span>
+      </button>
+      <button class="mobile-nav-btn" type="button" data-mobile-nav="profile">
+        <span class="mobile-nav-icon mobile-nav-avatar"></span>
+        <span class="mobile-nav-label">You</span>
+      </button>
+    </nav>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="/app.js?v=1"></script>
 </body>
