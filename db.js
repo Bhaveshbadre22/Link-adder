@@ -23,7 +23,14 @@ if (client === 'pg') {
 
   // DATABASE_URL should be a standard Postgres connection string
   // e.g. postgres://user:password@host:5432/dbname
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    // Keep pool small for serverless (Vercel/Neon) to avoid
+    // hitting "MaxClientsInSessionMode" on the remote pooler.
+    max: Number(process.env.DB_POOL_MAX || (process.env.VERCEL ? 1 : 5)),
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 5_000
+  });
 
   // Convert our SQLite-style '?' placeholders into Postgres $1, $2, ...
   function toPg(sql, params) {

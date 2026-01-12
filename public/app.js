@@ -318,7 +318,15 @@ function enterApp() {
   } else {
     showDashboard();
   }
-  loadFolders().then(loadLinks);
+  // Initial data load after successful login; if it fails
+  // (e.g. DB connection issue), show a toast instead of
+  // leaving an unhandled promise rejection.
+  loadFolders().then(loadLinks).catch((err) => {
+    console.error('Failed to load folders/links after login', err);
+    try {
+      showToast('Failed to load folders: ' + (err && err.message ? err.message : 'Unknown error'), 'error');
+    } catch (_e) {}
+  });
   // start polling for cross-user notifications
   if (notificationsPollId) {
     clearInterval(notificationsPollId);
@@ -2416,7 +2424,10 @@ if (bulkLinksSave) {
     let added = 0, skipped = 0, failed = 0;
     for (const url of lines) {
       try {
-        await api('/api/links', { method: 'POST', body: JSON.stringify({ url, folder_id: bulkTargetFolderId, note: null }) });
+        await api('/api/links', {
+          method: 'POST',
+          body: JSON.stringify({ url, folder_id: bulkTargetFolderId, note: null })
+        });
         added++;
       } catch (err) {
         if (err.status === 409) {
@@ -2426,9 +2437,7 @@ if (bulkLinksSave) {
         }
       }
     }
-    bulkLinksSave.disabled = false;
-    bulkLinksSave.textContent = 'Add Links';
-    closeBulkLinksModal();
+
     await loadFolders();
     await loadLinks();
     if (dashboardSection && dashboardSection.style.display === 'block') {
