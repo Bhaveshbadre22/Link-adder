@@ -2280,13 +2280,18 @@ body.theme-dark .card-meta-avatar{
 @media (max-width: 768px){
 	#addLinkSection{
 		position:fixed;
-		inset:0;
+		left:0;
+		right:0;
+		bottom:0;
+		top:96px;
 		max-width:100%;
 		background:radial-gradient(circle at top left,#eef2ff 0,#f9fafb 45%,#f3f4f6 100%);
 		z-index:1600;
 		padding:20px 16px 18px;
 		overflow-y:auto;
 		box-shadow:0 -10px 40px rgba(15,23,42,0.28);
+		border-top-left-radius:24px;
+		border-top-right-radius:24px;
 	}
 	body.mobile-add-open #addLinkSection{
 		display:block !important;
