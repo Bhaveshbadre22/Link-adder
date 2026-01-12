@@ -1632,6 +1632,21 @@ async function loadDashboardStats() {
 let folders = [];
 let currentFolder = null;
 
+function getFolderDisplayName(folder) {
+  if (!folder) return '';
+  const parts = [folder.name];
+  let current = folder;
+  const seen = new Set();
+  while (current.parent_id && !seen.has(current.parent_id)) {
+    seen.add(current.parent_id);
+    const parent = (folders || []).find(f => String(f.id) === String(current.parent_id));
+    if (!parent) break;
+    parts.unshift(parent.name);
+    current = parent;
+  }
+  return parts.join(' / ');
+}
+
 // Local preferences for root-level folder order, pinned folders, and expanded branches
 let rootFolderOrder = [];
 let pinnedRootFolders = new Set();
@@ -1848,7 +1863,19 @@ function renderFolders() {
   allRow.appendChild(allIcon);
   allRow.appendChild(allLabel);
   liAll.appendChild(allRow);
-  liAll.onclick = () => { currentFolder = null; showLinksView(); loadLinks(); renderFolders(); updateLinksHeading(); };
+  liAll.onclick = () => {
+    currentFolder = null;
+    showLinksView();
+    loadLinks();
+    renderFolders();
+    updateLinksHeading();
+    // on small screens, auto-scroll to the links list
+    if (window.innerWidth <= 768 && linksSection && typeof linksSection.scrollIntoView === 'function') {
+      setTimeout(() => {
+        linksSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
+  };
   foldersEl.appendChild(liAll);
   const byParent = {};
   folders.forEach(f => {
@@ -1933,6 +1960,12 @@ function renderFolders() {
         updateLinksHeading();
         // refresh unread counts in the background (e.g., if other folders have new links)
         refreshFolderUnreadCounts();
+        // on small screens, auto-scroll to the links list for convenience
+        if (window.innerWidth <= 768 && linksSection && typeof linksSection.scrollIntoView === 'function') {
+          setTimeout(() => {
+            linksSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 50);
+        }
       };
 
       const unreadCount = folderUnreadCounts[idStr] || 0;
@@ -2290,30 +2323,10 @@ function populateFolderSelect() {
   // populate multi-select dropdown for folders
   if (!linkFolder) return;
   linkFolder.innerHTML = '<option value="">(No Folder)</option>';
-  const byId = {};
-  (folders || []).forEach(f => {
-    byId[String(f.id)] = f;
-  });
-
-  function folderDisplayName(f) {
-    if (!f) return '';
-    const parts = [f.name];
-    let current = f;
-    const seen = new Set();
-    while (current.parent_id && !seen.has(current.parent_id)) {
-      seen.add(current.parent_id);
-      const parent = byId[String(current.parent_id)];
-      if (!parent) break;
-      parts.unshift(parent.name);
-      current = parent;
-    }
-    return parts.join(' / ');
-  }
-
   (folders || []).forEach(f => {
     const opt = document.createElement('option');
     opt.value = f.id;
-    opt.textContent = folderDisplayName(f);
+    opt.textContent = getFolderDisplayName(f);
     linkFolder.appendChild(opt);
   });
 
@@ -2339,7 +2352,7 @@ function populateFolderSelect() {
           updateFolderMultiSelectedLabel();
         });
         const span = document.createElement('span');
-        span.textContent = folderDisplayName(f);
+        span.textContent = getFolderDisplayName(f);
         // checkbox first, then text
         label.appendChild(cb);
         label.appendChild(span);
@@ -3039,7 +3052,7 @@ function renderLinksGrouped(arr, presetValue) {
       const moveRow = document.createElement('div'); moveRow.style.marginTop = '8px';
       const sel = document.createElement('select'); sel.style.minWidth = '140px';
       const optNone = document.createElement('option'); optNone.value = ''; optNone.textContent = '(No Folder)'; sel.appendChild(optNone);
-      folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = f.name; sel.appendChild(o); });
+      folders.forEach(f => { const o = document.createElement('option'); o.value = f.id; o.textContent = getFolderDisplayName(f); sel.appendChild(o); });
       sel.value = (l.folder_ids && l.folder_ids.length) ? l.folder_ids[0] : '';
       sel.onchange = async () => {
         try { const val = sel.value || null; await api('/api/links/' + l.id, { method: 'PUT', body: JSON.stringify({ folder_id: val }) }); loadLinks(); } catch (err) { showToast(err.message || 'Error', 'error'); }
