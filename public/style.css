@@ -233,7 +233,7 @@ button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-r
 	.date-group{column-count:2}
 }
 @media (max-width:400px){
-	.date-group{column-count:1}
+	.date-group{column-count:2}
 }
 
 .card{
